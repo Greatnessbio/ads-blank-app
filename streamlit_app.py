@@ -2,17 +2,13 @@ import streamlit as st
 import requests
 import pandas as pd
 import json
-import re
 from streamlit.logger import get_logger
-from collections import Counter
-import plotly.express as px
 import base64
-from io import BytesIO
 
 LOGGER = get_logger(__name__)
 
 # Set page config at the very beginning
-st.set_page_config(page_title="Advanced Google Search Results Analyzer", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="Google Search Results Parser", page_icon="🔍", layout="wide")
 
 # Load the SerpAPI key and credentials from the secrets file
 SERPAPI_KEY = st.secrets["serpapi"]["api_key"]
@@ -38,8 +34,7 @@ def fetch_google_search_results(query: str):
         "api_key": SERPAPI_KEY,
         "location": "Austin, Texas, United States",
         "hl": "en",
-        "gl": "us",
-        "num": 10  # Limit to 10 results
+        "gl": "us"
     }
     try:
         response = requests.get("https://serpapi.com/search", params=params)
@@ -59,7 +54,7 @@ def parse_results(results):
         'organic': []
     }
     
-    for ad in ads[:10]:  # Limit to 10 ads
+    for ad in ads[:10]:
         parsed_data['ads'].append({
             'Type': 'Ad',
             'Position': ad.get('position'),
@@ -69,14 +64,12 @@ def parse_results(results):
             'Description': ad.get('description'),
         })
     
-    for result in organic_results[:10]:  # Limit to 10 organic results
+    for result in organic_results[:10]:
         parsed_data['organic'].append({
             'Type': 'Organic',
-            'Position': result.get('position'),
             'Title': result.get('title'),
             'Link': result.get('link'),
-            'Snippet': result.get('snippet'),
-            'Featured Snippet': result.get('featured_snippet', {}).get('snippet', '')
+            'Snippet': result.get('snippet')
         })
     
     return parsed_data
@@ -101,9 +94,7 @@ def analyze_row(row):
     if not api_key:
         return "API key not found."
 
-    result_type = "ad" if row['Type'] == 'Ad' else "organic search result"
-    
-    prompt = f"""Analyze this {result_type} data and provide detailed insights for digital marketing:
+    prompt = f"""Analyze this search result data and provide insights for digital marketing:
 
 {row.to_json()}
 
@@ -171,33 +162,8 @@ def process_results(results):
         st.write(st.session_state.analyzed_results[f"organic_{index}"])
         st.write("---")
 
-def simple_keyword_extraction(text):
-    words = re.findall(r'\b\w+\b', text.lower())
-    return [word for word in words if len(word) > 2]
-
-def analyze_keywords(parsed_data):
-    all_text = ' '.join([result.get('Title', '') + ' ' + result.get('Description', '') + ' ' + result.get('Snippet', '') for result in parsed_data['ads'] + parsed_data['organic']])
-    keywords = simple_keyword_extraction(all_text)
-    keyword_freq = Counter(keywords)
-    return keyword_freq.most_common(20)
-
-def visualize_keyword_frequency(keyword_freq):
-    df = pd.DataFrame(keyword_freq, columns=['Keyword', 'Frequency'])
-    fig = px.bar(df, x='Keyword', y='Frequency', title='Top 20 Keywords')
-    st.plotly_chart(fig)
-
-def analyze_competitor_domains(parsed_data):
-    domains = [re.search(r'(?:https?://)?(?:www\.)?([^/]+)', result['Link']).group(1) if result['Link'] else '' for result in parsed_data['ads'] + parsed_data['organic']]
-    domain_freq = Counter(domains)
-    return domain_freq.most_common(10)
-
-def visualize_competitor_domains(domain_freq):
-    df = pd.DataFrame(domain_freq, columns=['Domain', 'Frequency'])
-    fig = px.pie(df, values='Frequency', names='Domain', title='Top 10 Competitor Domains')
-    st.plotly_chart(fig)
-
-def generate_report(parsed_data, keyword_freq, domain_freq):
-    report = "# Google Search Results Analysis Report\n\n"
+def generate_report(query, parsed_data):
+    report = f"# Search Results Analysis for '{query}'\n\n"
     
     report += "## Ad Results\n\n"
     for index, ad in enumerate(parsed_data['ads']):
@@ -205,7 +171,7 @@ def generate_report(parsed_data, keyword_freq, domain_freq):
         for key, value in ad.items():
             report += f"**{key}:** {value}\n\n"
         if f"ad_{index}" in st.session_state.analyzed_results:
-            report += f"**Analysis:**\n\n{st.session_state.analyzed_results[f'ad_{index}']}\n\n"
+            report += f"#### Analysis:\n\n{st.session_state.analyzed_results[f'ad_{index}']}\n\n"
         report += "---\n\n"
     
     report += "## Organic Results\n\n"
@@ -214,30 +180,16 @@ def generate_report(parsed_data, keyword_freq, domain_freq):
         for key, value in result.items():
             report += f"**{key}:** {value}\n\n"
         if f"organic_{index}" in st.session_state.analyzed_results:
-            report += f"**Analysis:**\n\n{st.session_state.analyzed_results[f'organic_{index}']}\n\n"
+            report += f"#### Analysis:\n\n{st.session_state.analyzed_results[f'organic_{index}']}\n\n"
         report += "---\n\n"
-    
-    report += "## Keyword Analysis\n\n"
-    report += "| Keyword | Frequency |\n|---------|-----------|\n"
-    for keyword, freq in keyword_freq:
-        report += f"| {keyword} | {freq} |\n"
-    
-    report += "\n## Competitor Domain Analysis\n\n"
-    report += "| Domain | Frequency |\n|--------|-----------|\n"
-    for domain, freq in domain_freq:
-        report += f"| {domain} | {freq} |\n"
     
     return report
 
-def get_table_download_link(df, filename, linktext):
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{linktext}</a>'
-    return href
-
-def get_report_download_link(report, filename, linktext):
-    b64 = base64.b64encode(report.encode()).decode()
-    href = f'<a href="data:file/markdown;base64,{b64}" download="{filename}">{linktext}</a>'
+def get_binary_file_downloader_html(bin_file, file_label='File'):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    bin_str = base64.b64encode(data).decode()
+    href = f'<a href="data:application/octet-stream;base64,{bin_str}" download="{os.path.basename(bin_file)}">Download {file_label}</a>'
     return href
 
 def login():
@@ -262,13 +214,13 @@ def main():
     if not st.session_state["logged_in"]:
         login()
     else:
-        st.title("Advanced Google Search Results Analyzer")
+        st.title("Google Search Results Parser")
         
         query = st.text_input("Enter search query:", "elisa kits il-6")
-        search_button = st.button("Analyze")
+        search_button = st.button("Search")
         
         if search_button:
-            with st.spinner("Fetching and analyzing results..."):
+            with st.spinner("Fetching results..."):
                 results = fetch_google_search_results(query)
                 parsed_data = parse_results(results)
                 
@@ -278,28 +230,20 @@ def main():
                 
                 display_results_table(parsed_data)
                 
-                st.subheader("Keyword Analysis")
-                keyword_freq = analyze_keywords(parsed_data)
-                visualize_keyword_frequency(keyword_freq)
-                
-                st.subheader("Competitor Domain Analysis")
-                domain_freq = analyze_competitor_domains(parsed_data)
-                visualize_competitor_domains(domain_freq)
-                
-                st.subheader("Detailed Result Analysis")
-                process_results(parsed_data)
-                
-                # Generate and provide download links for reports
-                report = generate_report(parsed_data, keyword_freq, domain_freq)
-                st.markdown(get_report_download_link(report, "search_analysis_report.md", "Download Full Report (Markdown)"), unsafe_allow_html=True)
-                
-                df_ads = pd.DataFrame(parsed_data['ads'])
-                df_organic = pd.DataFrame(parsed_data['organic'])
-                st.markdown(get_table_download_link(df_ads, "ad_results.csv", "Download Ad Results (CSV)"), unsafe_allow_html=True)
-                st.markdown(get_table_download_link(df_organic, "organic_results.csv", "Download Organic Results (CSV)"), unsafe_allow_html=True)
-                
                 st.subheader("Raw JSON Results")
                 st.json(results)
+                
+                process_results(parsed_data)
+                
+                # Generate and provide download link for the report
+                report = generate_report(query, parsed_data)
+                report_bytes = report.encode('utf-8')
+                st.download_button(
+                    label="Download Full Report",
+                    data=report_bytes,
+                    file_name="search_results_analysis.md",
+                    mime="text/markdown"
+                )
 
         if st.button("Show Stored Analyses"):
             for key, analysis in st.session_state.analyzed_results.items():
