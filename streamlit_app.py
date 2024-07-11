@@ -1,8 +1,7 @@
    import streamlit as st
-   import openai
-   import json
-   import pandas as pd
    import requests
+   import pandas as pd
+   import json
    import re
    from streamlit.logger import get_logger
 
@@ -16,8 +15,12 @@
    USERNAME = st.secrets["credentials"]["username"]
    PASSWORD = st.secrets["credentials"]["password"]
 
-   openai.api_base = "https://openrouter.ai/api/v1"
-   openai.api_key = st.secrets["secrets"]["openrouter_api_key"]
+   def load_api_key():
+       try:
+           return st.secrets["secrets"]["openrouter_api_key"]
+       except KeyError:
+           st.error("OpenRouter API key not found in secrets.toml. Please add it.")
+           return None
 
    @st.cache_data(ttl=300)
    def fetch_google_search_results(query: str):
@@ -87,17 +90,33 @@
            st.info("No organic results found.")
 
    def analyze_row(row):
+       api_key = load_api_key()
+       if not api_key:
+           return "API key not found."
+
        prompt = f"Analyze this search result data and provide insights for digital marketing:\n\n{row.to_json()}"
        
-       response = openai.ChatCompletion.create(
-           model="openai/gpt-3.5-turbo",
-           messages=[
-               {"role": "system", "content": "You are a digital marketing analyst."},
-               {"role": "user", "content": prompt}
-           ]
-       )
-       
-       return response.choices[0].message.content
+       try:
+           response = requests.post(
+               url="https://openrouter.ai/api/v1/chat/completions",
+               headers={"Authorization": f"Bearer {api_key}"},
+               json={
+                   "model": "anthropic/claude-3.5-sonnet",
+                   "messages": [
+                       {"role": "system", "content": "You are a digital marketing analyst."},
+                       {"role": "user", "content": prompt}
+                   ]
+               },
+               timeout=30
+           )
+           response.raise_for_status()
+           return response.json()['choices'][0]['message']['content']
+       except requests.RequestException as e:
+           LOGGER.error(f"API request failed: {e}")
+           return "Failed to analyze row."
+       except (KeyError, IndexError, ValueError) as e:
+           LOGGER.error(f"Error processing API response: {e}")
+           return "Error processing the analysis."
 
    def process_results(results):
        df_ads = pd.DataFrame(results['ads'])
