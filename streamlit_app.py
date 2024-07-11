@@ -76,28 +76,19 @@ def parse_results(results, num_results):
     return parsed_data
 
 def display_results_table(parsed_data):
-    st.subheader("Ad Results")
-    if parsed_data['ads']:
-        df_ads = pd.DataFrame(parsed_data['ads'])
-        st.dataframe(df_ads, use_container_width=True)
-    else:
-        st.info("No ad results found.")
-    
-    st.subheader("Organic Results")
-    if parsed_data['organic']:
-        df_organic = pd.DataFrame(parsed_data['organic'])
-        st.dataframe(df_organic, use_container_width=True)
-    else:
-        st.info("No organic results found.")
+    for result_type in ['ads', 'organic']:
+        st.subheader(f"{result_type.capitalize()} Results")
+        if parsed_data[result_type]:
+            df = pd.DataFrame(parsed_data[result_type])
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info(f"No {result_type} results found.")
 
-def analyze_row(row):
-    api_key = load_api_key()
-    if not api_key:
-        return "API key not found."
-
+@st.cache_data(ttl=3600)
+def analyze_row(_row, api_key):
     prompt = f"""Analyze this search result data and provide insights for digital marketing:
 
-{row.to_json()}
+{_row.to_json()}
 
 Please provide a comprehensive analysis including:
 1. SEO strengths and weaknesses (for organic results) or Ad copy effectiveness (for ads)
@@ -135,6 +126,11 @@ Be specific and provide actionable insights a digital marketer can use to compet
         return "Error processing the analysis."
 
 def process_results(results, result_type):
+    api_key = load_api_key()
+    if not api_key:
+        st.error("API key not found.")
+        return
+    
     df = pd.DataFrame(results[result_type])
     
     if 'analyzed_results' not in st.session_state:
@@ -143,14 +139,14 @@ def process_results(results, result_type):
     for index, row in df.iterrows():
         key = f"{result_type}_{index}"
         if key not in st.session_state.analyzed_results:
-            analysis = analyze_row(row)
-            st.session_state.analyzed_results[key] = analysis
+            with st.spinner(f"Analyzing {result_type.capitalize()} Result {index + 1}..."):
+                analysis = analyze_row(row, api_key)
+                st.session_state.analyzed_results[key] = analysis
         
-        st.write(f"{result_type.capitalize()} Result {index + 1}:")
-        st.write(row)
-        st.write("Analysis:")
-        st.write(st.session_state.analyzed_results[key])
-        st.write("---")
+        with st.expander(f"{result_type.capitalize()} Result {index + 1}"):
+            st.write(row)
+            st.write("Analysis:")
+            st.write(st.session_state.analyzed_results[key])
 
 def generate_report(query, parsed_data):
     report = f"# Search Results Analysis for '{query}'\n\n"
@@ -168,6 +164,10 @@ def generate_report(query, parsed_data):
                 report += "---\n\n"
     
     return report
+
+def get_download_link(content, filename, text):
+    b64 = base64.b64encode(content.encode()).decode()
+    return f'<a href="data:file/txt;base64,{b64}" download="{filename}">{text}</a>'
 
 def login():
     st.title("Login")
@@ -205,6 +205,7 @@ def main():
                     parsed_data = parse_results(results, num_results)
                     st.session_state.parsed_data = parsed_data
                     st.session_state.raw_results = results
+                    st.session_state.analyzed_results = {}  # Clear previous analyses
             else:
                 parsed_data = st.session_state.parsed_data
                 results = st.session_state.raw_results
@@ -223,25 +224,34 @@ def main():
                 if st.button("Analyze Organic"):
                     process_results(parsed_data, 'organic')
             
+            if st.session_state.analyzed_results:
+                st.subheader("Analysis Results")
+                for result_type in ['ads', 'organic']:
+                    if any(key.startswith(result_type) for key in st.session_state.analyzed_results):
+                        st.write(f"### {result_type.capitalize()} Analyses")
+                        for key, analysis in st.session_state.analyzed_results.items():
+                            if key.startswith(result_type):
+                                _, index = key.split("_")
+                                with st.expander(f"{result_type.capitalize()} Result {int(index) + 1}"):
+                                    st.write(analysis)
+            
             # Generate and provide download link for the report
             report = generate_report(query, parsed_data)
             report_bytes = report.encode('utf-8')
             st.download_button(
-                label="Download Full Report",
+                label="Download Full Report (Markdown)",
                 data=report_bytes,
                 file_name="search_results_analysis.md",
                 mime="text/markdown"
             )
             
-            st.subheader("Raw JSON Results")
-            st.json(results)
-
-        if st.button("Show Stored Analyses"):
-            for key, analysis in st.session_state.analyzed_results.items():
-                result_type, index = key.split("_")
-                st.write(f"Analysis for {result_type.capitalize()} Result {int(index) + 1}:")
-                st.write(analysis)
-                st.write("---")
+            # Raw JSON Results in a collapsible section with download option
+            with st.expander("Raw JSON Results"):
+                st.json(results)
+                st.markdown(get_download_link(json.dumps(results, indent=2), 
+                                              "raw_results.json", 
+                                              "Download Raw JSON"),
+                            unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
