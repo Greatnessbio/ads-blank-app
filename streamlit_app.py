@@ -42,7 +42,7 @@ def parse_results(results):
       'organic': []
   }
   
-  for ad in ads[:5]:
+  for ad in ads[:10]:
       parsed_data['ads'].append({
           'Type': 'Ad',
           'Position': ad.get('position'),
@@ -52,7 +52,7 @@ def parse_results(results):
           'Description': ad.get('description'),
       })
   
-  for result in organic_results[:5]:
+  for result in organic_results[:10]:
       parsed_data['organic'].append({
           'Type': 'Organic',
           'Title': result.get('title'),
