@@ -23,7 +23,7 @@ def load_api_key():
         return None
 
 @st.cache_data(ttl=300)
-def fetch_google_search_results(query: str, num_results: int, search_type: str):
+def fetch_google_search_results(query: str, num_results: int):
     if not SERPAPI_KEY:
         st.error("SerpAPI key is missing. Please check your secrets.")
         return {}
@@ -37,11 +37,6 @@ def fetch_google_search_results(query: str, num_results: int, search_type: str):
         "gl": "us"
     }
     
-    if search_type == "Shopping":
-        params["engine"] = "google_shopping"
-    elif search_type == "News":
-        params["tbm"] = "nws"
-    
     try:
         response = requests.get("https://serpapi.com/search", params=params)
         response.raise_for_status()
@@ -54,14 +49,10 @@ def fetch_google_search_results(query: str, num_results: int, search_type: str):
 def parse_results(results, num_results):
     ads = results.get('ads', [])
     organic_results = results.get('organic_results', [])
-    shopping_results = results.get('shopping_results', [])
-    news_results = results.get('news_results', [])
     
     parsed_data = {
         'ads': [],
-        'organic': [],
-        'shopping': [],
-        'news': []
+        'organic': []
     }
     
     for ad in ads[:num_results]:
@@ -82,34 +73,22 @@ def parse_results(results, num_results):
             'Snippet': result.get('snippet')
         })
     
-    for result in shopping_results[:num_results]:
-        parsed_data['shopping'].append({
-            'Type': 'Shopping',
-            'Title': result.get('title'),
-            'Link': result.get('link'),
-            'Price': result.get('price'),
-            'Source': result.get('source')
-        })
-    
-    for result in news_results[:num_results]:
-        parsed_data['news'].append({
-            'Type': 'News',
-            'Title': result.get('title'),
-            'Link': result.get('link'),
-            'Source': result.get('source'),
-            'Date': result.get('date')
-        })
-    
     return parsed_data
 
 def display_results_table(parsed_data):
-    for result_type in ['ads', 'organic', 'shopping', 'news']:
-        if parsed_data[result_type]:
-            st.subheader(f"{result_type.capitalize()} Results")
-            df = pd.DataFrame(parsed_data[result_type])
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info(f"No {result_type} results found.")
+    st.subheader("Ad Results")
+    if parsed_data['ads']:
+        df_ads = pd.DataFrame(parsed_data['ads'])
+        st.dataframe(df_ads, use_container_width=True)
+    else:
+        st.info("No ad results found.")
+    
+    st.subheader("Organic Results")
+    if parsed_data['organic']:
+        df_organic = pd.DataFrame(parsed_data['organic'])
+        st.dataframe(df_organic, use_container_width=True)
+    else:
+        st.info("No organic results found.")
 
 def analyze_row(row):
     api_key = load_api_key()
@@ -176,7 +155,7 @@ def process_results(results, result_type):
 def generate_report(query, parsed_data):
     report = f"# Search Results Analysis for '{query}'\n\n"
     
-    for result_type in ['ads', 'organic', 'shopping', 'news']:
+    for result_type in ['ads', 'organic']:
         if parsed_data[result_type]:
             report += f"## {result_type.capitalize()} Results\n\n"
             for index, result in enumerate(parsed_data[result_type]):
@@ -212,51 +191,50 @@ def main():
     if not st.session_state["logged_in"]:
         login()
     else:
-        st.title("Advanced Google Search Results Parser")
+        st.title("Google Search Results Parser")
         
         query = st.text_input("Enter search query:", "elisa kits il-6")
         num_results = st.slider("Number of results to fetch", min_value=1, max_value=10, value=5)
-        search_type = st.selectbox("Search type", ["Web", "Shopping", "News"])
         
         search_button = st.button("Search")
         
-        if search_button:
-            with st.spinner("Fetching results..."):
-                results = fetch_google_search_results(query, num_results, search_type)
-                parsed_data = parse_results(results, num_results)
-                
-                st.subheader("Search Information")
-                st.write(f"Total results: {results.get('search_information', {}).get('total_results', 'N/A')}")
-                st.write(f"Time taken: {results.get('search_information', {}).get('time_taken_displayed', 'N/A')} seconds")
-                
-                display_results_table(parsed_data)
-                
-                st.subheader("Raw JSON Results")
-                st.json(results)
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    if st.button("Analyze Ads"):
-                        process_results(parsed_data, 'ads')
-                with col2:
-                    if st.button("Analyze Organic"):
-                        process_results(parsed_data, 'organic')
-                with col3:
-                    if st.button("Analyze Shopping"):
-                        process_results(parsed_data, 'shopping')
-                with col4:
-                    if st.button("Analyze News"):
-                        process_results(parsed_data, 'news')
-                
-                # Generate and provide download link for the report
-                report = generate_report(query, parsed_data)
-                report_bytes = report.encode('utf-8')
-                st.download_button(
-                    label="Download Full Report",
-                    data=report_bytes,
-                    file_name="search_results_analysis.md",
-                    mime="text/markdown"
-                )
+        if search_button or 'parsed_data' in st.session_state:
+            if search_button:
+                with st.spinner("Fetching results..."):
+                    results = fetch_google_search_results(query, num_results)
+                    parsed_data = parse_results(results, num_results)
+                    st.session_state.parsed_data = parsed_data
+                    st.session_state.raw_results = results
+            else:
+                parsed_data = st.session_state.parsed_data
+                results = st.session_state.raw_results
+            
+            st.subheader("Search Information")
+            st.write(f"Total results: {results.get('search_information', {}).get('total_results', 'N/A')}")
+            st.write(f"Time taken: {results.get('search_information', {}).get('time_taken_displayed', 'N/A')} seconds")
+            
+            display_results_table(parsed_data)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Analyze Ads"):
+                    process_results(parsed_data, 'ads')
+            with col2:
+                if st.button("Analyze Organic"):
+                    process_results(parsed_data, 'organic')
+            
+            # Generate and provide download link for the report
+            report = generate_report(query, parsed_data)
+            report_bytes = report.encode('utf-8')
+            st.download_button(
+                label="Download Full Report",
+                data=report_bytes,
+                file_name="search_results_analysis.md",
+                mime="text/markdown"
+            )
+            
+            st.subheader("Raw JSON Results")
+            st.json(results)
 
         if st.button("Show Stored Analyses"):
             for key, analysis in st.session_state.analyzed_results.items():
