@@ -3,11 +3,15 @@ import requests
 import pandas as pd
 from typing import Dict, List
 
+# Set page config at the very beginning
+st.set_page_config(page_title="Google Search Results Parser", page_icon="🔍", layout="wide")
+
 # Use Streamlit's cache mechanism
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_resource
 def load_serpapi():
   try:
       from serpapi import GoogleSearch
+      st.success("SerpAPI imported successfully")
       return GoogleSearch
   except ImportError as e:
       st.error(f"Error importing SerpAPI: {e}")
@@ -27,6 +31,10 @@ PASSWORD = st.secrets["credentials"]["Sambino"]
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_google_search_results(query: str) -> Dict:
+  if GoogleSearch is None:
+      st.error("SerpAPI is not available. Please check the installation.")
+      return {}
+  
   params = {
       "engine": "google",
       "q": query,
@@ -83,8 +91,6 @@ def login():
               st.error("Invalid username or password")
 
 def main():
-  st.set_page_config(page_title="Google Search Results Parser", page_icon="🔍", layout="wide")
-
   if "logged_in" not in st.session_state:
       st.session_state["logged_in"] = False
 
@@ -96,13 +102,10 @@ def main():
       query = st.text_input("Enter search query:", "elisa kits for il6")
       
       if st.button("Search"):
-          if GoogleSearch:
-              with st.spinner("Fetching results..."):
-                  results = fetch_google_search_results(query)
-                  parsed_data = parse_results(results)
-                  display_results_table(parsed_data)
-          else:
-              st.error("SerpAPI is not available. Please check the installation.")
+          with st.spinner("Fetching results..."):
+              results = fetch_google_search_results(query)
+              parsed_data = parse_results(results)
+              display_results_table(parsed_data)
 
 if __name__ == "__main__":
   main()
