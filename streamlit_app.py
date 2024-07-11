@@ -10,7 +10,7 @@ st.set_page_config(page_title="Google Search Results Parser", page_icon="🔍", 
 @st.cache_resource
 def load_serpapi():
   try:
-      from serpapi import GoogleSearch
+      from serpapi.google_search import GoogleSearch
       st.success("SerpAPI imported successfully")
       return GoogleSearch
   except ImportError as e:
@@ -25,44 +25,66 @@ def load_serpapi():
 GoogleSearch = load_serpapi()
 
 # Load the SerpAPI key and credentials from the secrets file
-SERPAPI_KEY = st.secrets["serpapi"]["api_key"]
+SERPAPI_KEY = st.secrets.get("serpapi", {}).get("api_key")
 USERNAME = "Sambino"
-PASSWORD = st.secrets["credentials"]["Sambino"]
+PASSWORD = st.secrets.get("credentials", {}).get("Sambino")
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300)
 def fetch_google_search_results(query: str) -> Dict:
   if GoogleSearch is None:
       st.error("SerpAPI is not available. Please check the installation.")
       return {}
   
+  if not SERPAPI_KEY:
+      st.error("SerpAPI key is missing. Please check your secrets.")
+      return {}
+  
   params = {
       "engine": "google",
       "q": query,
-      "api_key": SERPAPI_KEY
+      "api_key": SERPAPI_KEY,
+      "location": "Austin, Texas, United States",
+      "hl": "en",
+      "gl": "us"
   }
   try:
       search = GoogleSearch(params)
       results = search.get_dict()
       return results
   except Exception as e:
-      st.error(f"Error fetching search results: {e}")
+      st.error(f"Error fetching search results: {str(e)}")
       return {}
 
-def parse_results(results: Dict) -> List[Dict]:
+def parse_results(results: Dict) -> Dict[str, List[Dict]]:
   ads = results.get('ads', [])
   organic_results = results.get('organic_results', [])
   
-  parsed_data = []
+  parsed_data = {
+      'ads': [],
+      'organic': []
+  }
+  
   for ad in ads[:5]:
-      parsed_data.append({
+      parsed_data['ads'].append({
           'Type': 'Ad',
+          'Position': ad.get('position'),
+          'Block Position': ad.get('block_position'),
           'Title': ad.get('title'),
           'Link': ad.get('link'),
-          'Snippet': ad.get('snippet')
+          'Displayed Link': ad.get('displayed_link'),
+          'Tracking Link': ad.get('tracking_link'),
+          'Thumbnail': ad.get('thumbnail'),
+          'Description': ad.get('description'),
+          'Extensions': ', '.join(ad.get('extensions', [])),
+          'Sitelinks': [link.get('title') for link in ad.get('sitelinks', [])],
+          'Price': ad.get('price'),
+          'Rating': ad.get('rating'),
+          'Reviews': ad.get('reviews'),
+          'Source': ad.get('source')
       })
   
   for result in organic_results[:5]:
-      parsed_data.append({
+      parsed_data['organic'].append({
           'Type': 'Organic',
           'Title': result.get('title'),
           'Link': result.get('link'),
@@ -71,9 +93,20 @@ def parse_results(results: Dict) -> List[Dict]:
   
   return parsed_data
 
-def display_results_table(parsed_data: List[Dict]):
-  df = pd.DataFrame(parsed_data)
-  st.dataframe(df, use_container_width=True)
+def display_results_table(parsed_data: Dict[str, List[Dict]]):
+  st.subheader("Ad Results")
+  if parsed_data['ads']:
+      df_ads = pd.DataFrame(parsed_data['ads'])
+      st.dataframe(df_ads, use_container_width=True)
+  else:
+      st.info("No ad results found.")
+  
+  st.subheader("Organic Results")
+  if parsed_data['organic']:
+      df_organic = pd.DataFrame(parsed_data['organic'])
+      st.dataframe(df_organic, use_container_width=True)
+  else:
+      st.info("No organic results found.")
 
 def login():
   st.title("Login")
@@ -99,13 +132,25 @@ def main():
   else:
       st.title("Google Search Results Parser")
       
-      query = st.text_input("Enter search query:", "elisa kits for il6")
+      col1, col2 = st.columns([3, 1])
+      with col1:
+          query = st.text_input("Enter search query:", "hotels in dusseldorf")
+      with col2:
+          search_button = st.button("Search")
       
-      if st.button("Search"):
+      if search_button:
           with st.spinner("Fetching results..."):
               results = fetch_google_search_results(query)
               parsed_data = parse_results(results)
+              
+              st.subheader("Search Information")
+              st.write(f"Total results: {results.get('search_information', {}).get('total_results', 'N/A')}")
+              st.write(f"Time taken: {results.get('search_information', {}).get('time_taken_displayed', 'N/A')} seconds")
+              
               display_results_table(parsed_data)
+              
+              st.subheader("Raw JSON Results")
+              st.json(results)
 
 if __name__ == "__main__":
   main()
