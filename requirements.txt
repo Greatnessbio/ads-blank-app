@@ -1,5 +1,5 @@
 streamlit 
 requests 
 beautifulsoup4 
-serpapi==2.1.0
+serpapi=2.1.0
 pandas
