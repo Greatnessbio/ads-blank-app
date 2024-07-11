@@ -32,7 +32,7 @@ def fetch_google_search_results(query: str):
         "engine": "google",
         "q": query,
         "api_key": SERPAPI_KEY,
-        "location": "Austin, Texas, United States",
+        "location": "",
         "hl": "en",
         "gl": "us"
     }
