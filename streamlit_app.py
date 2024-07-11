@@ -5,16 +5,9 @@ import json
 import re
 from streamlit.logger import get_logger
 from collections import Counter
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 import plotly.express as px
 import base64
 from io import BytesIO
-import matplotlib.pyplot as plt
-
-nltk.download('punkt', quiet=True)
-nltk.download('stopwords', quiet=True)
 
 LOGGER = get_logger(__name__)
 
@@ -178,14 +171,13 @@ def process_results(results):
         st.write(st.session_state.analyzed_results[f"organic_{index}"])
         st.write("---")
 
-def extract_keywords(text):
-    stop_words = set(stopwords.words('english'))
-    word_tokens = word_tokenize(text.lower())
-    return [word for word in word_tokens if word.isalnum() and word not in stop_words]
+def simple_keyword_extraction(text):
+    words = re.findall(r'\b\w+\b', text.lower())
+    return [word for word in words if len(word) > 2]
 
 def analyze_keywords(parsed_data):
     all_text = ' '.join([result.get('Title', '') + ' ' + result.get('Description', '') + ' ' + result.get('Snippet', '') for result in parsed_data['ads'] + parsed_data['organic']])
-    keywords = extract_keywords(all_text)
+    keywords = simple_keyword_extraction(all_text)
     keyword_freq = Counter(keywords)
     return keyword_freq.most_common(20)
 
