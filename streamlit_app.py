@@ -1,25 +1,32 @@
 import streamlit as st
 import requests
 import pandas as pd
+from typing import Dict, List
 
-# Add error handling for SerpAPI import
-try:
-  from serpapi import GoogleSearch
-  print(f"SerpAPI imported successfully")
-except ImportError as e:
-  print(f"Error importing SerpAPI: {e}")
+# Use Streamlit's cache mechanism
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def load_serpapi():
   try:
-      import serpapi
-      print(f"SerpAPI version: {serpapi.__version__}")
-  except ImportError:
-      print("SerpAPI is not installed")
+      from serpapi import GoogleSearch
+      return GoogleSearch
+  except ImportError as e:
+      st.error(f"Error importing SerpAPI: {e}")
+      try:
+          import serpapi
+          st.warning(f"SerpAPI version: {serpapi.__version__}")
+      except ImportError:
+          st.error("SerpAPI is not installed")
+      return None
+
+GoogleSearch = load_serpapi()
 
 # Load the SerpAPI key and credentials from the secrets file
 SERPAPI_KEY = st.secrets["serpapi"]["api_key"]
-USERNAME = "Sambino"  # This is the username from your secrets
-PASSWORD = st.secrets["credentials"]["Sambino"]  # This is the password for Sambino
+USERNAME = "Sambino"
+PASSWORD = st.secrets["credentials"]["Sambino"]
 
-def fetch_google_search_results(query):
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_google_search_results(query: str) -> Dict:
   params = {
       "engine": "google",
       "q": query,
@@ -29,50 +36,55 @@ def fetch_google_search_results(query):
       search = GoogleSearch(params)
       results = search.get_dict()
       return results
-  except NameError:
-      st.error("GoogleSearch is not available. Please check SerpAPI installation.")
+  except Exception as e:
+      st.error(f"Error fetching search results: {e}")
       return {}
 
-def parse_results(results):
+def parse_results(results: Dict) -> List[Dict]:
   ads = results.get('ads', [])
   organic_results = results.get('organic_results', [])
   
-  parsed_ads = []
+  parsed_data = []
   for ad in ads[:5]:
-      parsed_ads.append({
+      parsed_data.append({
           'Type': 'Ad',
           'Title': ad.get('title'),
           'Link': ad.get('link'),
           'Snippet': ad.get('snippet')
       })
   
-  parsed_results = []
   for result in organic_results[:5]:
-      parsed_results.append({
+      parsed_data.append({
           'Type': 'Organic',
           'Title': result.get('title'),
           'Link': result.get('link'),
           'Snippet': result.get('snippet')
       })
   
-  return parsed_ads + parsed_results
+  return parsed_data
 
-def display_results_table(parsed_data):
+def display_results_table(parsed_data: List[Dict]):
   df = pd.DataFrame(parsed_data)
-  st.dataframe(df)
+  st.dataframe(df, use_container_width=True)
 
 def login():
   st.title("Login")
-  username = st.text_input("Username")
-  password = st.text_input("Password", type="password")
-  if st.button("Login"):
-      if username == USERNAME and password == PASSWORD:
-          st.session_state["logged_in"] = True
-          st.success("Logged in successfully!")
-      else:
-          st.error("Invalid username or password")
+  with st.form("login_form"):
+      username = st.text_input("Username")
+      password = st.text_input("Password", type="password")
+      submit_button = st.form_submit_button("Login")
+      
+      if submit_button:
+          if username == USERNAME and password == PASSWORD:
+              st.session_state["logged_in"] = True
+              st.success("Logged in successfully!")
+              st.experimental_rerun()
+          else:
+              st.error("Invalid username or password")
 
 def main():
+  st.set_page_config(page_title="Google Search Results Parser", page_icon="🔍", layout="wide")
+
   if "logged_in" not in st.session_state:
       st.session_state["logged_in"] = False
 
@@ -84,10 +96,13 @@ def main():
       query = st.text_input("Enter search query:", "elisa kits for il6")
       
       if st.button("Search"):
-          with st.spinner("Fetching results..."):
-              results = fetch_google_search_results(query)
-              parsed_data = parse_results(results)
-              display_results_table(parsed_data)
+          if GoogleSearch:
+              with st.spinner("Fetching results..."):
+                  results = fetch_google_search_results(query)
+                  parsed_data = parse_results(results)
+                  display_results_table(parsed_data)
+          else:
+              st.error("SerpAPI is not available. Please check the installation.")
 
 if __name__ == "__main__":
   main()
