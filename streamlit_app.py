@@ -4,6 +4,7 @@ import pandas as pd
 import json
 from streamlit.logger import get_logger
 import base64
+from serpapi import GoogleSearch
 
 LOGGER = get_logger(__name__)
 
@@ -34,55 +35,54 @@ def fetch_google_search_results(query: str, num_results: int):
         "api_key": SERPAPI_KEY,
         "num": num_results,
         "hl": "en",
-        "gl": "us"
+        "gl": "us",
+        "include_ads": "true"  # Explicitly request ad results
     }
     
     try:
-        response = requests.get("https://serpapi.com/search", params=params)
-        response.raise_for_status()
-        results = response.json()
-        # Debug: Log the keys in the results
-        LOGGER.info(f"Keys in API response: {results.keys()}")
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        
+        # Log the full response for debugging
+        LOGGER.info(f"Full API response: {json.dumps(results, indent=2)}")
+        
         return results
-    except requests.RequestException as e:
+    except Exception as e:
         st.error(f"Error fetching search results: {str(e)}")
         return {}
 
 def parse_results(results, num_results):
-    ads = results.get('ads', [])
-    organic_results = results.get('organic_results', [])
-    
     parsed_data = {
         'ads': [],
         'organic': []
     }
     
-    # Debug: Log the number of ads and organic results
-    LOGGER.info(f"Number of ads: {len(ads)}")
-    LOGGER.info(f"Number of organic results: {len(organic_results)}")
+    # Check for ads in multiple possible locations
+    ad_sources = ['ads', 'shopping_results', 'paid_products', 'immersive_products']
+    for source in ad_sources:
+        if source in results:
+            for item in results[source][:num_results]:
+                parsed_data['ads'].append({
+                    'Type': 'Ad',
+                    'Position': item.get('position'),
+                    'Title': item.get('title'),
+                    'Link': item.get('link'),
+                    'Displayed Link': item.get('displayed_link'),
+                    'Price': item.get('price'),
+                    'Source': item.get('source'),
+                    'Rating': item.get('rating'),
+                    'Reviews': item.get('reviews'),
+                })
     
-    for ad in ads:
-        parsed_data['ads'].append({
-            'Type': 'Ad',
-            'Position': ad.get('position'),
-            'Block Position': ad.get('block_position'),
-            'Title': ad.get('title'),
-            'Link': ad.get('link'),
-            'Tracking Link': ad.get('tracking_link'),
-            'Displayed Link': ad.get('displayed_link'),
-            'Description': ad.get('description'),
-            'Thumbnail': ad.get('thumbnail'),
-            'Sitelinks': json.dumps(ad.get('sitelinks')),  # Convert to string for DataFrame
-            'Extensions': ', '.join(ad.get('extensions', [])),
-        })
-    
-    for result in organic_results[:num_results]:
-        parsed_data['organic'].append({
-            'Type': 'Organic',
-            'Title': result.get('title'),
-            'Link': result.get('link'),
-            'Snippet': result.get('snippet')
-        })
+    # Parse organic results
+    if 'organic_results' in results:
+        for result in results['organic_results'][:num_results]:
+            parsed_data['organic'].append({
+                'Type': 'Organic',
+                'Title': result.get('title'),
+                'Link': result.get('link'),
+                'Snippet': result.get('snippet')
+            })
     
     return parsed_data
 
@@ -204,7 +204,7 @@ def main():
     else:
         st.title("Google Search Results Parser")
         
-        query = st.text_input("Enter search query:", "elisa kits il-6")
+        query = st.text_input("Enter search query:", "hot dogs")
         num_results = st.slider("Number of results to fetch", min_value=1, max_value=10, value=5)
         
         search_button = st.button("Search")
