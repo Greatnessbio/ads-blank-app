@@ -41,6 +41,8 @@ def fetch_google_search_results(query: str, num_results: int):
         response = requests.get("https://serpapi.com/search", params=params)
         response.raise_for_status()
         results = response.json()
+        # Debug: Log the keys in the results
+        LOGGER.info(f"Keys in API response: {results.keys()}")
         return results
     except requests.RequestException as e:
         st.error(f"Error fetching search results: {str(e)}")
@@ -55,14 +57,23 @@ def parse_results(results, num_results):
         'organic': []
     }
     
-    for ad in ads[:num_results]:
+    # Debug: Log the number of ads and organic results
+    LOGGER.info(f"Number of ads: {len(ads)}")
+    LOGGER.info(f"Number of organic results: {len(organic_results)}")
+    
+    for ad in ads:
         parsed_data['ads'].append({
             'Type': 'Ad',
             'Position': ad.get('position'),
+            'Block Position': ad.get('block_position'),
             'Title': ad.get('title'),
             'Link': ad.get('link'),
+            'Tracking Link': ad.get('tracking_link'),
             'Displayed Link': ad.get('displayed_link'),
             'Description': ad.get('description'),
+            'Thumbnail': ad.get('thumbnail'),
+            'Sitelinks': json.dumps(ad.get('sitelinks')),  # Convert to string for DataFrame
+            'Extensions': ', '.join(ad.get('extensions', [])),
         })
     
     for result in organic_results[:num_results]:
