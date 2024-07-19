@@ -56,24 +56,53 @@ def parse_results(results, num_results):
         'ads': [],
         'organic': []
     }
-    
-    # Check for ads in multiple possible locations
+
+    # Comprehensive Ad Field Mapping
+    ad_field_mapping = {
+        'text_ads': {
+            'position': 'position',
+            'title': 'title',
+            'link': 'link',
+            'displayed_link': 'displayed_link',
+            'description': 'description',
+            'source': 'source',
+            'extensions': 'extensions',
+            'sitelinks': 'sitelinks'
+        },
+        'shopping_results': {
+            'position': 'position',
+            'title': 'title',
+            'link': 'link',
+            'displayed_link': 'displayed_link',
+            'price': 'price',
+            'source': 'source',
+            'rating': 'rating',
+            'reviews': 'reviews',
+            'thumbnail': 'thumbnail'
+        },
+        'immersive_products': {  # Add mapping for immersive products
+            'position': 'position',
+            'title': 'title',
+            'link': 'link',
+            'displayed_link': 'displayed_link',
+            'price': 'price',
+            'source': 'source',
+            'thumbnail': 'thumbnail'
+        },
+        # Add mappings for other ad types as needed
+    }
+
+    # Parse ads dynamically
     ad_sources = ['ads', 'shopping_results', 'paid_products', 'immersive_products']
     for source in ad_sources:
         if source in results:
             for item in results[source][:num_results]:
-                parsed_data['ads'].append({
-                    'Type': 'Ad',
-                    'Position': item.get('position'),
-                    'Title': item.get('title'),
-                    'Link': item.get('link'),
-                    'Displayed Link': item.get('displayed_link'),
-                    'Price': item.get('price'),
-                    'Source': item.get('source'),
-                    'Rating': item.get('rating'),
-                    'Reviews': item.get('reviews'),
-                })
-    
+                ad_data = {}
+                mapping = ad_field_mapping.get(source, {})
+                for field, key in mapping.items():
+                    ad_data[field] = item.get(key)
+                parsed_data['ads'].append(ad_data)
+
     # Parse organic results
     if 'organic_results' in results:
         for result in results['organic_results'][:num_results]:
@@ -91,7 +120,13 @@ def display_results_table(parsed_data):
         st.subheader(f"{result_type.capitalize()} Results")
         if parsed_data[result_type]:
             df = pd.DataFrame(parsed_data[result_type])
-            st.dataframe(df, use_container_width=True)
+
+            # Custom Table Formatting for Ads
+            if result_type == 'ads':
+                st.dataframe(df.style.highlight_max(subset=['price', 'rating'], color='lightgreen'),
+                             use_container_width=True)
+            else:
+                st.dataframe(df, use_container_width=True)
         else:
             st.info(f"No {result_type} results found.")
 
