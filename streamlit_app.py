@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import pandas as pd
-import numpy as np
 import json
 from streamlit.logger import get_logger
 import base64
@@ -196,25 +195,19 @@ def process_results(parsed_data, original_json):
                         "Position": row.get('Position'),
                         "Title": row.get('Title'),
                         "Link": row.get('Link'),
-                        "SEO Analysis": analysis.get('seo_analysis'),
-                        "Content Strategy": analysis.get('content_strategy'),
-                        "Keywords": ', '.join(analysis.get('keywords', []))[:200],  # Limit to first 200 chars
-                        "Competitive Positioning": analysis.get('competitive_positioning'),
-                        "Improvements": analysis.get('improvements'),
-                        "USP": analysis.get('usp'),
-                        "CTA Effectiveness": analysis.get('cta_effectiveness'),
-                        "Target Audience": analysis.get('target_audience'),
-                        "Recommendations": analysis.get('recommendations')
+                        "Original Data": json.dumps(row),
+                        "Analysis": json.dumps(analysis)
                     })
     
     # Store results in session state
     st.session_state.analyzed_results = all_results
-    
-    # Display results
-    display_results(all_results)
 
-def display_results(results):
-    df = pd.DataFrame(results)
+def display_results():
+    if 'analyzed_results' not in st.session_state or not st.session_state.analyzed_results:
+        st.warning("No analysis results available. Please run the analysis first.")
+        return
+
+    df = pd.DataFrame(st.session_state.analyzed_results)
     st.dataframe(df, use_container_width=True)
     
     csv = df.to_csv(index=False)
@@ -222,7 +215,8 @@ def display_results(results):
         label="Download Analysis as CSV",
         data=csv,
         file_name="search_results_analysis.csv",
-        mime="text/csv"
+        mime="text/csv",
+        key="download_csv"
     )
 
 def generate_report(query, analyzed_results):
@@ -232,15 +226,17 @@ def generate_report(query, analyzed_results):
         report += f"## {result['Type']} Result - Position {result['Position']}\n\n"
         report += f"**Title:** {result['Title']}\n"
         report += f"**Link:** {result['Link']}\n\n"
-        report += f"### SEO Analysis\n{result['SEO Analysis']}\n\n"
-        report += f"### Content Strategy\n{result['Content Strategy']}\n\n"
-        report += f"### Keywords\n{result['Keywords']}\n\n"
-        report += f"### Competitive Positioning\n{result['Competitive Positioning']}\n\n"
-        report += f"### Improvements\n{result['Improvements']}\n\n"
-        report += f"### Unique Selling Proposition\n{result['USP']}\n\n"
-        report += f"### Call-to-Action Effectiveness\n{result['CTA Effectiveness']}\n\n"
-        report += f"### Target Audience\n{result['Target Audience']}\n\n"
-        report += f"### Recommendations\n{result['Recommendations']}\n\n"
+        
+        analysis = json.loads(result['Analysis'])
+        report += f"### SEO Analysis\n{analysis.get('seo_analysis', 'N/A')}\n\n"
+        report += f"### Content Strategy\n{analysis.get('content_strategy', 'N/A')}\n\n"
+        report += f"### Keywords\n{', '.join(analysis.get('keywords', ['N/A']))}\n\n"
+        report += f"### Competitive Positioning\n{analysis.get('competitive_positioning', 'N/A')}\n\n"
+        report += f"### Improvements\n{analysis.get('improvements', 'N/A')}\n\n"
+        report += f"### Unique Selling Proposition\n{analysis.get('usp', 'N/A')}\n\n"
+        report += f"### Call-to-Action Effectiveness\n{analysis.get('cta_effectiveness', 'N/A')}\n\n"
+        report += f"### Target Audience\n{analysis.get('target_audience', 'N/A')}\n\n"
+        report += f"### Recommendations\n{analysis.get('recommendations', 'N/A')}\n\n"
         report += "---\n\n"
     
     return report
@@ -268,9 +264,6 @@ def main():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
     
-    if "analyzed_results" not in st.session_state:
-        st.session_state.analyzed_results = None
-
     if not st.session_state["logged_in"]:
         login()
     else:
@@ -288,7 +281,8 @@ def main():
                     parsed_data = parse_results(results, num_results)
                     st.session_state.parsed_data = parsed_data
                     st.session_state.raw_results = results
-                    st.session_state.analyzed_results = None  # Clear previous analyses
+                    if 'analyzed_results' in st.session_state:
+                        del st.session_state.analyzed_results  # Clear previous analyses
             else:
                 parsed_data = st.session_state.parsed_data
                 results = st.session_state.raw_results
@@ -299,21 +293,21 @@ def main():
             
             display_results_table(parsed_data)
             
-            if st.button("Analyze Results"):
+            if st.button("Analyze Results", key="analyze_button"):
                 process_results(parsed_data, results)
             
-            if st.session_state.analyzed_results:
-                display_results(st.session_state.analyzed_results)
+            display_results()
             
             # Generate and provide download link for the report
-            if st.session_state.analyzed_results:
+            if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
                 report = generate_report(query, st.session_state.analyzed_results)
                 report_bytes = report.encode('utf-8')
                 st.download_button(
                     label="Download Full Report (Markdown)",
                     data=report_bytes,
                     file_name="search_results_analysis.md",
-                    mime="text/markdown"
+                    mime="text/markdown",
+                    key="download_report"
                 )
             
             # Raw JSON Results in a collapsible section with download option
