@@ -36,16 +36,13 @@ def fetch_google_search_results(query: str, num_results: int):
         "num": num_results,
         "hl": "en",
         "gl": "us",
-        "include_ads": "true"  # Explicitly request ad results
+        "include_ads": "true"
     }
     
     try:
         search = GoogleSearch(params)
         results = search.get_dict()
-        
-        # Log the full response for debugging
         LOGGER.info(f"Full API response: {json.dumps(results, indent=2)}")
-        
         return results
     except Exception as e:
         st.error(f"Error fetching search results: {str(e)}")
@@ -57,60 +54,42 @@ def parse_results(results, num_results):
         'organic': []
     }
 
-    # Comprehensive Ad Field Mapping
     ad_field_mapping = {
-        'text_ads': {
+        'ads': {
             'position': 'position',
             'title': 'title',
             'link': 'link',
             'displayed_link': 'displayed_link',
             'description': 'description',
             'source': 'source',
-            'extensions': 'extensions',
-            'sitelinks': 'sitelinks'
         },
         'shopping_results': {
             'position': 'position',
             'title': 'title',
             'link': 'link',
-            'displayed_link': 'displayed_link',
-            'price': 'price',
             'source': 'source',
-            'rating': 'rating',
-            'reviews': 'reviews',
-            'thumbnail': 'thumbnail'
-        },
-        'immersive_products': {  # Add mapping for immersive products
-            'position': 'position',
-            'title': 'title',
-            'link': 'link',
-            'displayed_link': 'displayed_link',
             'price': 'price',
-            'source': 'source',
-            'thumbnail': 'thumbnail'
+            'thumbnail': 'thumbnail',
         },
-        # Add mappings for other ad types as needed
     }
 
-    # Parse ads dynamically
-    ad_sources = ['ads', 'shopping_results', 'paid_products', 'immersive_products']
+    ad_sources = ['ads', 'shopping_results']
     for source in ad_sources:
         if source in results:
             for item in results[source][:num_results]:
                 ad_data = {}
                 mapping = ad_field_mapping.get(source, {})
                 for field, key in mapping.items():
-                    ad_data[field] = item.get(key)
+                    ad_data[field] = item.get(key, '')
                 parsed_data['ads'].append(ad_data)
 
-    # Parse organic results
     if 'organic_results' in results:
         for result in results['organic_results'][:num_results]:
             parsed_data['organic'].append({
                 'Type': 'Organic',
-                'Title': result.get('title'),
-                'Link': result.get('link'),
-                'Snippet': result.get('snippet')
+                'Title': result.get('title', ''),
+                'Link': result.get('link', ''),
+                'Snippet': result.get('snippet', '')
             })
     
     return parsed_data
@@ -120,13 +99,7 @@ def display_results_table(parsed_data):
         st.subheader(f"{result_type.capitalize()} Results")
         if parsed_data[result_type]:
             df = pd.DataFrame(parsed_data[result_type])
-
-            # Custom Table Formatting for Ads
-            if result_type == 'ads':
-                st.dataframe(df.style.highlight_max(subset=['price', 'rating'], color='lightgreen'),
-                             use_container_width=True)
-            else:
-                st.dataframe(df, use_container_width=True)
+            st.dataframe(df, use_container_width=True)
         else:
             st.info(f"No {result_type} results found.")
 
@@ -134,7 +107,7 @@ def display_results_table(parsed_data):
 def analyze_row(_row, api_key):
     prompt = f"""Analyze this search result data and provide insights for digital marketing:
 
-{_row.to_json()}
+{_row.to_dict()}
 
 Please provide a comprehensive analysis including:
 1. SEO strengths and weaknesses (for organic results) or Ad copy effectiveness (for ads)
