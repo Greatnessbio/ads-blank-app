@@ -127,12 +127,12 @@ def display_results_table(parsed_data: Dict[str, List[Dict[str, Any]]]):
             st.info(f"No {result_type.replace('_', ' ')} results found.")
 
 @st.cache_data(ttl=3600)
-def analyze_row(_row: Dict[str, Any], api_key: str, original_json: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_row(_row: Dict[str, Any], api_key: str, original_json: Dict[str, Any], query: str) -> Dict[str, Any]:
     result_type = _row['Type'].lower()
     original_data = next((item for item in original_json.get(f'{result_type}s', []) 
                           if str(item.get('position')) == str(_row.get('Position'))), {})
     
-    prompt = f"""Analyze this search result data for the query 'elisa kits' and provide insights for digital marketing:
+    prompt = f"""Analyze this search result data for the query '{query}' and provide insights for digital marketing:
 
 Result Type: {_row['Type']}
 Title: {_row['Title']}
@@ -163,7 +163,7 @@ Format your response as a JSON object with the following keys: seo_analysis, con
             json={
                 "model": "anthropic/claude-3.5-sonnet",
                 "messages": [
-                    {"role": "system", "content": "You are an expert digital marketing analyst specializing in SEO, PPC, and competitive analysis for scientific and medical products, particularly ELISA kits."},
+                    {"role": "system", "content": "You are an expert digital marketing analyst specializing in SEO, PPC, and competitive analysis."},
                     {"role": "user", "content": prompt}
                 ]
             },
@@ -179,7 +179,8 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         LOGGER.error(f"Error processing API response: {e}")
         return {"error": f"Error processing the analysis: {str(e)}"}
 
-def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json: Dict[str, Any]):
+# In the main function or wherever you're calling analyze_row:
+def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json: Dict[str, Any], query: str):
     api_key = load_api_key()
     if not api_key:
         st.error("API key not found.")
@@ -191,7 +192,7 @@ def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json:
         if data:
             for index, row in enumerate(data):
                 with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
-                    analysis = analyze_row(row, api_key, original_json)
+                    analysis = analyze_row(row, api_key, original_json, query)  # Pass the query here
                     result = {
                         "Type": result_type,
                         "Position": row.get('Position'),
