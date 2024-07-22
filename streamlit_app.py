@@ -129,6 +129,12 @@ def parse_results(results, num_results):
 
 
 @st.cache_data(ttl=3600)
+import json
+import requests
+from streamlit.logger import get_logger
+
+LOGGER = get_logger(__name__)
+
 def analyze_row(_row, api_key, original_json):
     result_type = _row["Type"].lower()
     original_data = next(
@@ -137,10 +143,10 @@ def analyze_row(_row, api_key, original_json):
             for item in original_json.get(f"{result_type}s", [])
             if str(item.get("position")) == str(_row.get("Position"))
         ),
-        {},
+        {}
     )
 
-    prompt = f"""Analyze this search result data for the query 'elisa kits' and provide insights for digital marketing:
+    prompt = f"""Analyze this search result data for the query 'biotech marketing' and provide insights for digital marketing:
 
 Result Type: {_row['Type']}
 Title: {_row['Title']}
@@ -173,7 +179,7 @@ Format your response as a JSON object with the following keys: seo_analysis, con
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are an expert digital marketing analyst specializing in SEO, PPC, and competitive analysis for scientific and medical products, particularly ELISA kits.",
+                        "content": "You are an expert digital marketing analyst specializing in SEO, PPC, and competitive analysis for biotech marketing.",
                     },
                     {"role": "user", "content": prompt},
                 ],
@@ -184,12 +190,11 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         analysis = response.json()["choices"][0]["message"]["content"]
         return json.loads(analysis)
     except requests.RequestException as e:
-        LOGGER.error(f"API request failed: {e}")
+        LOGGER.error(f"API request failed for row {_row['Position']}: {e}")
         return {"error": f"Failed to analyze row: {str(e)}"}
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
-        LOGGER.error(f"Error processing API response: {e}")
+        LOGGER.error(f"Error processing API response for row {_row['Position']}: {e}")
         return {"error": f"Error processing the analysis: {str(e)}"}
-
 
 def process_results(parsed_data, original_json):
     api_key = load_api_key()
@@ -197,14 +202,12 @@ def process_results(parsed_data, original_json):
         st.error("API key not found.")
         return
 
-    all_results = []  # Initialize the list here
+    all_results = []
 
     for result_type, data in parsed_data.items():
         if data:
             for index, row in enumerate(data):
-                with st.spinner(
-                    f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."
-                ):
+                with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
                     analysis = analyze_row(row, api_key, original_json)
                     all_results.append(
                         {
