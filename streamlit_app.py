@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import numpy as np
 import json
 from streamlit.logger import get_logger
 import base64
@@ -143,7 +144,7 @@ Original Data: {json.dumps(original_data, indent=2)}
 Please provide a comprehensive analysis including:
 1. SEO strengths and weaknesses (for organic results) or Ad copy effectiveness (for ads)
 2. Content strategy insights
-3. Keyword optimization suggestions
+3. Keyword optimization suggestions (list top 5 keywords)
 4. Competitive positioning
 5. Potential areas for improvement
 6. Unique selling propositions (if applicable)
@@ -197,7 +198,7 @@ def process_results(parsed_data, original_json):
                         "Link": row.get('Link'),
                         "SEO Analysis": analysis.get('seo_analysis'),
                         "Content Strategy": analysis.get('content_strategy'),
-                        "Keywords": analysis.get('keywords'),
+                        "Keywords": ', '.join(analysis.get('keywords', []))[:200],  # Limit to first 200 chars
                         "Competitive Positioning": analysis.get('competitive_positioning'),
                         "Improvements": analysis.get('improvements'),
                         "USP": analysis.get('usp'),
@@ -206,7 +207,14 @@ def process_results(parsed_data, original_json):
                         "Recommendations": analysis.get('recommendations')
                     })
     
-    df = pd.DataFrame(all_results)
+    # Store results in session state
+    st.session_state.analyzed_results = all_results
+    
+    # Display results
+    display_results(all_results)
+
+def display_results(results):
+    df = pd.DataFrame(results)
     st.dataframe(df, use_container_width=True)
     
     csv = df.to_csv(index=False)
@@ -217,20 +225,23 @@ def process_results(parsed_data, original_json):
         mime="text/csv"
     )
 
-def generate_report(query, parsed_data):
+def generate_report(query, analyzed_results):
     report = f"# Search Results Analysis for '{query}'\n\n"
     
-    for result_type, data in parsed_data.items():
-        if data:
-            report += f"## {result_type.capitalize().replace('_', ' ')} Results\n\n"
-            for index, result in enumerate(data):
-                report += f"### {result_type.capitalize().replace('_', ' ')} Result {index + 1}\n\n"
-                for key, value in result.items():
-                    report += f"**{key}:** {value}\n\n"
-                key = f"{result_type}_{index}"
-                if key in st.session_state.analyzed_results:
-                    report += f"#### Analysis:\n\n{st.session_state.analyzed_results[key]}\n\n"
-                report += "---\n\n"
+    for result in analyzed_results:
+        report += f"## {result['Type']} Result - Position {result['Position']}\n\n"
+        report += f"**Title:** {result['Title']}\n"
+        report += f"**Link:** {result['Link']}\n\n"
+        report += f"### SEO Analysis\n{result['SEO Analysis']}\n\n"
+        report += f"### Content Strategy\n{result['Content Strategy']}\n\n"
+        report += f"### Keywords\n{result['Keywords']}\n\n"
+        report += f"### Competitive Positioning\n{result['Competitive Positioning']}\n\n"
+        report += f"### Improvements\n{result['Improvements']}\n\n"
+        report += f"### Unique Selling Proposition\n{result['USP']}\n\n"
+        report += f"### Call-to-Action Effectiveness\n{result['CTA Effectiveness']}\n\n"
+        report += f"### Target Audience\n{result['Target Audience']}\n\n"
+        report += f"### Recommendations\n{result['Recommendations']}\n\n"
+        report += "---\n\n"
     
     return report
 
@@ -256,6 +267,9 @@ def login():
 def main():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
+    
+    if "analyzed_results" not in st.session_state:
+        st.session_state.analyzed_results = None
 
     if not st.session_state["logged_in"]:
         login()
@@ -274,7 +288,7 @@ def main():
                     parsed_data = parse_results(results, num_results)
                     st.session_state.parsed_data = parsed_data
                     st.session_state.raw_results = results
-                    st.session_state.analyzed_results = {}  # Clear previous analyses
+                    st.session_state.analyzed_results = None  # Clear previous analyses
             else:
                 parsed_data = st.session_state.parsed_data
                 results = st.session_state.raw_results
@@ -288,15 +302,19 @@ def main():
             if st.button("Analyze Results"):
                 process_results(parsed_data, results)
             
+            if st.session_state.analyzed_results:
+                display_results(st.session_state.analyzed_results)
+            
             # Generate and provide download link for the report
-            report = generate_report(query, parsed_data)
-            report_bytes = report.encode('utf-8')
-            st.download_button(
-                label="Download Full Report (Markdown)",
-                data=report_bytes,
-                file_name="search_results_analysis.md",
-                mime="text/markdown"
-            )
+            if st.session_state.analyzed_results:
+                report = generate_report(query, st.session_state.analyzed_results)
+                report_bytes = report.encode('utf-8')
+                st.download_button(
+                    label="Download Full Report (Markdown)",
+                    data=report_bytes,
+                    file_name="search_results_analysis.md",
+                    mime="text/markdown"
+                )
             
             # Raw JSON Results in a collapsible section with download option
             with st.expander("Raw JSON Results"):
