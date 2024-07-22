@@ -132,7 +132,7 @@ def analyze_row(_row, api_key, original_json):
     
     prompt = f"""Analyze this search result data and provide insights for digital marketing:
 
-Parsed data: {json.dumps(_row.to_dict(), indent=2)}
+Parsed data: {json.dumps(_row, indent=2)}
 
 Original data: {json.dumps(original_data, indent=2)}
 
@@ -147,7 +147,8 @@ Please provide a comprehensive analysis including:
 8. Target audience insights
 9. Recommendations for outranking this result (for organic) or creating more effective ads (for ads)
 
-Be specific and provide actionable insights a digital marketer can use to compete with or outrank this result."""
+Be specific and provide actionable insights a digital marketer can use to compete with or outrank this result.
+Format your response as a JSON object with the following keys: seo_analysis, content_strategy, keywords, competitive_positioning, improvements, usp, cta_effectiveness, target_audience, recommendations."""
 
     try:
         response = requests.post(
@@ -163,13 +164,14 @@ Be specific and provide actionable insights a digital marketer can use to compet
             timeout=60
         )
         response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
+        analysis = response.json()['choices'][0]['message']['content']
+        return json.loads(analysis)
     except requests.RequestException as e:
         LOGGER.error(f"API request failed: {e}")
-        return "Failed to analyze row."
-    except (KeyError, IndexError, ValueError) as e:
+        return {"error": "Failed to analyze row."}
+    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
         LOGGER.error(f"Error processing API response: {e}")
-        return "Error processing the analysis."
+        return {"error": "Error processing the analysis."}
 
 def process_results(parsed_data, original_json):
     api_key = load_api_key()
@@ -177,23 +179,39 @@ def process_results(parsed_data, original_json):
         st.error("API key not found.")
         return
     
-    if 'analyzed_results' not in st.session_state:
-        st.session_state.analyzed_results = {}
+    all_results = []
     
     for result_type, data in parsed_data.items():
         if data:
-            st.subheader(f"{result_type.capitalize().replace('_', ' ')} Analyses")
             for index, row in enumerate(data):
-                key = f"{result_type}_{index}"
-                if key not in st.session_state.analyzed_results:
-                    with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
-                        analysis = analyze_row(row, api_key, original_json)
-                        st.session_state.analyzed_results[key] = analysis
-                
-                with st.expander(f"{result_type.capitalize().replace('_', ' ')} Result {index + 1}"):
-                    st.write(row)
-                    st.write("Analysis:")
-                    st.write(st.session_state.analyzed_results[key])
+                with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
+                    analysis = analyze_row(row, api_key, original_json)
+                    all_results.append({
+                        "Type": result_type,
+                        "Position": row.get('Position'),
+                        "Title": row.get('Title'),
+                        "Link": row.get('Link'),
+                        "SEO Analysis": analysis.get('seo_analysis'),
+                        "Content Strategy": analysis.get('content_strategy'),
+                        "Keywords": analysis.get('keywords'),
+                        "Competitive Positioning": analysis.get('competitive_positioning'),
+                        "Improvements": analysis.get('improvements'),
+                        "USP": analysis.get('usp'),
+                        "CTA Effectiveness": analysis.get('cta_effectiveness'),
+                        "Target Audience": analysis.get('target_audience'),
+                        "Recommendations": analysis.get('recommendations')
+                    })
+    
+    df = pd.DataFrame(all_results)
+    st.dataframe(df, use_container_width=True)
+    
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label="Download Analysis as CSV",
+        data=csv,
+        file_name="search_results_analysis.csv",
+        mime="text/csv"
+    )
 
 def generate_report(query, parsed_data):
     report = f"# Search Results Analysis for '{query}'\n\n"
@@ -265,17 +283,6 @@ def main():
             
             if st.button("Analyze Results"):
                 process_results(parsed_data, results)
-            
-            if st.session_state.analyzed_results:
-                st.subheader("Analysis Results")
-                for result_type, data in parsed_data.items():
-                    if data:
-                        st.write(f"### {result_type.capitalize().replace('_', ' ')} Analyses")
-                        for index, _ in enumerate(data):
-                            key = f"{result_type}_{index}"
-                            if key in st.session_state.analyzed_results:
-                                with st.expander(f"{result_type.capitalize().replace('_', ' ')} Result {index + 1}"):
-                                    st.write(st.session_state.analyzed_results[key])
             
             # Generate and provide download link for the report
             report = generate_report(query, parsed_data)
