@@ -5,6 +5,8 @@ import json
 from streamlit.logger import get_logger
 import base64
 from serpapi import GoogleSearch
+from typing import List, Dict, Any
+import altair as alt
 
 LOGGER = get_logger(__name__)
 
@@ -24,7 +26,7 @@ def load_api_key():
         return None
 
 @st.cache_data(ttl=300)
-def fetch_google_search_results(query: str, num_results: int):
+def fetch_google_search_results(query: str, num_results: int) -> Dict[str, Any]:
     if not SERPAPI_KEY:
         st.error("SerpAPI key is missing. Please check your secrets.")
         return {}
@@ -48,7 +50,7 @@ def fetch_google_search_results(query: str, num_results: int):
         st.error(f"Error fetching search results: {str(e)}")
         return {}
 
-def parse_results(results, num_results):
+def parse_results(results: Dict[str, Any], num_results: int) -> Dict[str, List[Dict[str, Any]]]:
     parsed_data = {
         'ads': [],
         'organic': [],
@@ -115,7 +117,7 @@ def parse_results(results, num_results):
 
     return parsed_data
 
-def display_results_table(parsed_data):
+def display_results_table(parsed_data: Dict[str, List[Dict[str, Any]]]):
     for result_type, data in parsed_data.items():
         if data:
             st.subheader(f"{result_type.capitalize().replace('_', ' ')} Results")
@@ -125,7 +127,7 @@ def display_results_table(parsed_data):
             st.info(f"No {result_type.replace('_', ' ')} results found.")
 
 @st.cache_data(ttl=3600)
-def analyze_row(_row, api_key, original_json):
+def analyze_row(_row: Dict[str, Any], api_key: str, original_json: Dict[str, Any]) -> Dict[str, Any]:
     result_type = _row['Type'].lower()
     original_data = next((item for item in original_json.get(f'{result_type}s', []) 
                           if str(item.get('position')) == str(_row.get('Position'))), {})
@@ -152,7 +154,7 @@ Please provide a comprehensive analysis including:
 9. Recommendations for outranking this result (for organic) or creating more effective ads (for ads)
 
 Be specific and provide actionable insights a digital marketer can use to compete with or outrank this result.
-Format your response as a JSON object with the following keys: seo_analysis, content_strategy, keywords, competitive_positioning, improvements, usp, cta_effectiveness, target_audience, recommendations."""
+Format your response as a JSON object with the following keys: seo_analysis, content_strategy, keywords (as a list), competitive_positioning, improvements, usp, cta_effectiveness, target_audience, recommendations."""
 
     try:
         response = requests.post(
@@ -177,7 +179,7 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         LOGGER.error(f"Error processing API response: {e}")
         return {"error": f"Error processing the analysis: {str(e)}"}
 
-def process_results(parsed_data, original_json):
+def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json: Dict[str, Any]):
     api_key = load_api_key()
     if not api_key:
         st.error("API key not found.")
@@ -190,14 +192,22 @@ def process_results(parsed_data, original_json):
             for index, row in enumerate(data):
                 with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
                     analysis = analyze_row(row, api_key, original_json)
-                    all_results.append({
+                    result = {
                         "Type": result_type,
                         "Position": row.get('Position'),
                         "Title": row.get('Title'),
                         "Link": row.get('Link'),
-                        "Original Data": json.dumps(row),
-                        "Analysis": json.dumps(analysis)
-                    })
+                        "SEO Analysis": analysis.get('seo_analysis'),
+                        "Content Strategy": analysis.get('content_strategy'),
+                        "Keywords": ', '.join(analysis.get('keywords', [])),
+                        "Competitive Positioning": analysis.get('competitive_positioning'),
+                        "Improvements": analysis.get('improvements'),
+                        "USP": analysis.get('usp'),
+                        "CTA Effectiveness": analysis.get('cta_effectiveness'),
+                        "Target Audience": analysis.get('target_audience'),
+                        "Recommendations": analysis.get('recommendations')
+                    }
+                    all_results.append(result)
     
     # Store results in session state
     st.session_state.analyzed_results = all_results
@@ -208,8 +218,35 @@ def display_results():
         return
 
     df = pd.DataFrame(st.session_state.analyzed_results)
+    
+    # Display interactive table
+    st.subheader("Analysis Results")
     st.dataframe(df, use_container_width=True)
     
+    # Visualizations
+    st.subheader("Result Type Distribution")
+    type_counts = df['Type'].value_counts()
+    chart = alt.Chart(type_counts.reset_index()).mark_bar().encode(
+        x='index',
+        y='Type',
+        color='index'
+    ).properties(width=600)
+    st.altair_chart(chart, use_container_width=True)
+    
+    # Word cloud of keywords
+    st.subheader("Keyword Cloud")
+    from wordcloud import WordCloud
+    import matplotlib.pyplot as plt
+    
+    all_keywords = ' '.join(df['Keywords'].str.cat(sep=' ').split(', '))
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
+    
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.imshow(wordcloud, interpolation='bilinear')
+    ax.axis('off')
+    st.pyplot(fig)
+    
+    # Download options
     csv = df.to_csv(index=False)
     st.download_button(
         label="Download Analysis as CSV",
@@ -219,7 +256,7 @@ def display_results():
         key="download_csv"
     )
 
-def generate_report(query, analyzed_results):
+def generate_report(query: str, analyzed_results: List[Dict[str, Any]]) -> str:
     report = f"# Search Results Analysis for '{query}'\n\n"
     
     for result in analyzed_results:
@@ -227,21 +264,20 @@ def generate_report(query, analyzed_results):
         report += f"**Title:** {result['Title']}\n"
         report += f"**Link:** {result['Link']}\n\n"
         
-        analysis = json.loads(result['Analysis'])
-        report += f"### SEO Analysis\n{analysis.get('seo_analysis', 'N/A')}\n\n"
-        report += f"### Content Strategy\n{analysis.get('content_strategy', 'N/A')}\n\n"
-        report += f"### Keywords\n{', '.join(analysis.get('keywords', ['N/A']))}\n\n"
-        report += f"### Competitive Positioning\n{analysis.get('competitive_positioning', 'N/A')}\n\n"
-        report += f"### Improvements\n{analysis.get('improvements', 'N/A')}\n\n"
-        report += f"### Unique Selling Proposition\n{analysis.get('usp', 'N/A')}\n\n"
-        report += f"### Call-to-Action Effectiveness\n{analysis.get('cta_effectiveness', 'N/A')}\n\n"
-        report += f"### Target Audience\n{analysis.get('target_audience', 'N/A')}\n\n"
-        report += f"### Recommendations\n{analysis.get('recommendations', 'N/A')}\n\n"
+        report += f"### SEO Analysis\n{result['SEO Analysis']}\n\n"
+        report += f"### Content Strategy\n{result['Content Strategy']}\n\n"
+        report += f"### Keywords\n{result['Keywords']}\n\n"
+        report += f"### Competitive Positioning\n{result['Competitive Positioning']}\n\n"
+        report += f"### Improvements\n{result['Improvements']}\n\n"
+        report += f"### Unique Selling Proposition\n{result['USP']}\n\n"
+        report += f"### Call-to-Action Effectiveness\n{result['CTA Effectiveness']}\n\n"
+        report += f"### Target Audience\n{result['Target Audience']}\n\n"
+        report += f"### Recommendations\n{result['Recommendations']}\n\n"
         report += "---\n\n"
     
     return report
 
-def get_download_link(content, filename, text):
+def get_download_link(content: str, filename: str, text: str) -> str:
     b64 = base64.b64encode(content.encode()).decode()
     return f'<a href="data:file/txt;base64,{b64}" download="{filename}">{text}</a>'
 
@@ -299,24 +335,24 @@ def main():
             display_results()
             
             # Generate and provide download link for the report
-            if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
-                report = generate_report(query, st.session_state.analyzed_results)
-                report_bytes = report.encode('utf-8')
-                st.download_button(
-                    label="Download Full Report (Markdown)",
-                    data=report_bytes,
-                    file_name="search_results_analysis.md",
-                    mime="text/markdown",
-                    key="download_report"
-                )
-            
-            # Raw JSON Results in a collapsible section with download option
-            with st.expander("Raw JSON Results"):
-                st.json(results)
-                st.markdown(get_download_link(json.dumps(results, indent=2), 
-                                              "raw_results.json", 
-                                              "Download Raw JSON"),
-                            unsafe_allow_html=True)
+    if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
+        report = generate_report(query, st.session_state.analyzed_results)
+        report_bytes = report.encode('utf-8')
+        st.download_button(
+            label="Download Full Report (Markdown)",
+            data=report_bytes,
+            file_name="search_results_analysis.md",
+            mime="text/markdown",
+            key="download_report"
+        )
+    
+    # Raw JSON Results in a collapsible section with download option
+    with st.expander("Raw JSON Results"):
+        st.json(results)
+        st.markdown(get_download_link(json.dumps(results, indent=2), 
+                                      "raw_results.json", 
+                                      "Download Raw JSON"),
+                    unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
