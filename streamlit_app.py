@@ -331,29 +331,31 @@ def main():
             display_results_table(parsed_data)
             
             if st.button("Analyze Results", key="analyze_button"):
-                process_results(parsed_data, results)
+                process_results(parsed_data, results, query)
             
             display_results()
             
             # Generate and provide download link for the report
-    if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
-        report = generate_report(query, st.session_state.analyzed_results)
-        report_bytes = report.encode('utf-8')
-        st.download_button(
-            label="Download Full Report (Markdown)",
-            data=report_bytes,
-            file_name="search_results_analysis.md",
-            mime="text/markdown",
-            key="download_report"
-        )
-    
-    # Raw JSON Results in a collapsible section with download option
-    with st.expander("Raw JSON Results"):
-        st.json(results)
-        st.markdown(get_download_link(json.dumps(results, indent=2), 
-                                      "raw_results.json", 
-                                      "Download Raw JSON"),
-                    unsafe_allow_html=True)
+            if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
+                report = generate_report(query, st.session_state.analyzed_results)
+                report_bytes = report.encode('utf-8')
+                st.download_button(
+                    label="Download Full Report (Markdown)",
+                    data=report_bytes,
+                    file_name="search_results_analysis.md",
+                    mime="text/markdown",
+                    key="download_report"
+                )
+            
+            # Raw JSON Results in a collapsible section with download option
+            with st.expander("Raw JSON Results"):
+                st.json(results)
+                st.markdown(get_download_link(json.dumps(results, indent=2), 
+                                              "raw_results.json", 
+                                              "Download Raw JSON"),
+                            unsafe_allow_html=True)
+        else:
+            st.info("Enter a search query and click 'Search' to begin.")
 
 if __name__ == "__main__":
     main()
