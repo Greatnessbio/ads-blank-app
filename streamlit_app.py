@@ -7,8 +7,6 @@ import base64
 from serpapi import GoogleSearch
 from typing import List, Dict, Any
 import altair as alt
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 
 LOGGER = get_logger(__name__)
 
@@ -226,35 +224,57 @@ def display_results():
     st.dataframe(df, use_container_width=True)
     
     # Visualizations
-    st.subheader("Result Type Distribution")
-    type_counts = df['Type'].value_counts().reset_index()
-    type_counts.columns = ['Type', 'Count']
-    chart = alt.Chart(type_counts).mark_bar().encode(
-        x='Type',
-        y='Count',
-        color='Type'
-    ).properties(width=600)
-    st.altair_chart(chart, use_container_width=True)
-    
-    # Word cloud of keywords
-    st.subheader("Keyword Cloud")
-    all_keywords = ' '.join(df['Keywords'].str.cat(sep=' ').split(', '))
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
-    
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wordcloud, interpolation='bilinear')
-    ax.axis('off')
-    st.pyplot(fig)
+    if not df.empty:
+        st.subheader("Result Type Distribution")
+        type_counts = df['Type'].value_counts().reset_index()
+        type_counts.columns = ['Type', 'Count']
+        
+        if not type_counts.empty:
+            chart = alt.Chart(type_counts).mark_bar().encode(
+                x=alt.X('Type:N', sort='-y'),
+                y=alt.Y('Count:Q'),
+                color='Type:N'
+            ).properties(width=600)
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info("Not enough data to display Result Type Distribution.")
+        
+        # Word cloud of keywords
+        if 'Keywords' in df.columns and df['Keywords'].notna().any():
+            st.subheader("Keyword Cloud")
+            try:
+                from wordcloud import WordCloud
+                import matplotlib.pyplot as plt
+                
+                all_keywords = ' '.join(df['Keywords'].dropna().str.cat(sep=' ').split(', '))
+                if all_keywords.strip():
+                    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
+                    
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    ax.imshow(wordcloud, interpolation='bilinear')
+                    ax.axis('off')
+                    st.pyplot(fig)
+                else:
+                    st.info("No keywords available for the word cloud.")
+            except ImportError:
+                st.warning("WordCloud library is not installed. Please install it to see the keyword cloud visualization.")
+        else:
+            st.info("No keyword data available for visualization.")
+    else:
+        st.info("No data available for visualization.")
     
     # Download options
-    csv = df.to_csv(index=False)
-    st.download_button(
-        label="Download Analysis as CSV",
-        data=csv,
-        file_name="search_results_analysis.csv",
-        mime="text/csv",
-        key="download_csv"
-    )
+    if not df.empty:
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download Analysis as CSV",
+            data=csv,
+            file_name="search_results_analysis.csv",
+            mime="text/csv",
+            key="download_csv"
+        )
+    else:
+        st.info("No data available for download.")
 
 def generate_report(query: str, analyzed_results: List[Dict[str, Any]]) -> str:
     report = f"# Search Results Analysis for '{query}'\n\n"
@@ -320,41 +340,41 @@ def main():
                     if 'analyzed_results' in st.session_state:
                         del st.session_state.analyzed_results  # Clear previous analyses
             else:
-                parsed_data = st.session_state.parsed_data
-                results = st.session_state.raw_results
-            
-            st.subheader("Search Information")
-            st.write(f"Total results: {results.get('search_information', {}).get('total_results', 'N/A')}")
-            st.write(f"Time taken: {results.get('search_information', {}).get('time_taken_displayed', 'N/A')} seconds")
-            
-            display_results_table(parsed_data)
-            
-            if st.button("Analyze Results", key="analyze_button"):
-                process_results(parsed_data, results, query)
-            
-            display_results()
-            
-            # Generate and provide download link for the report
-            if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
-                report = generate_report(query, st.session_state.analyzed_results)
-                report_bytes = report.encode('utf-8')
-                st.download_button(
-                    label="Download Full Report (Markdown)",
-                    data=report_bytes,
-                    file_name="search_results_analysis.md",
-                    mime="text/markdown",
-                    key="download_report"
-                )
-            
-            # Raw JSON Results in a collapsible section with download option
-            with st.expander("Raw JSON Results"):
-                st.json(results)
-                st.markdown(get_download_link(json.dumps(results, indent=2), 
-                                              "raw_results.json", 
-                                              "Download Raw JSON"),
-                            unsafe_allow_html=True)
-        else:
-            st.info("Enter a search query and click 'Search' to begin.")
+            parsed_data = st.session_state.parsed_data
+            results = st.session_state.raw_results
+        
+        st.subheader("Search Information")
+        st.write(f"Total results: {results.get('search_information', {}).get('total_results', 'N/A')}")
+        st.write(f"Time taken: {results.get('search_information', {}).get('time_taken_displayed', 'N/A')} seconds")
+        
+        display_results_table(parsed_data)
+        
+        if st.button("Analyze Results", key="analyze_button"):
+            process_results(parsed_data, results, query)
+        
+        display_results()
+        
+        # Generate and provide download link for the report
+        if 'analyzed_results' in st.session_state and st.session_state.analyzed_results:
+            report = generate_report(query, st.session_state.analyzed_results)
+            report_bytes = report.encode('utf-8')
+            st.download_button(
+                label="Download Full Report (Markdown)",
+                data=report_bytes,
+                file_name="search_results_analysis.md",
+                mime="text/markdown",
+                key="download_report"
+            )
+        
+        # Raw JSON Results in a collapsible section with download option
+        with st.expander("Raw JSON Results"):
+            st.json(results)
+            st.markdown(get_download_link(json.dumps(results, indent=2), 
+                                          "raw_results.json", 
+                                          "Download Raw JSON"),
+                        unsafe_allow_html=True)
+    else:
+        st.info("Enter a search query and click 'Search' to begin.")
 
 if __name__ == "__main__":
     main()
