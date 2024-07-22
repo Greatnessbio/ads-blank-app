@@ -6,7 +6,6 @@ from streamlit.logger import get_logger
 import base64
 from serpapi import GoogleSearch
 from typing import List, Dict, Any
-import altair as alt
 
 LOGGER = get_logger(__name__)
 
@@ -126,12 +125,7 @@ def display_results_table(parsed_data: Dict[str, List[Dict[str, Any]]]):
         else:
             st.info(f"No {result_type.replace('_', ' ')} results found.")
 
-@st.cache_data(ttl=3600)
-def analyze_row(_row: Dict[str, Any], api_key: str, original_json: Dict[str, Any], query: str) -> Dict[str, Any]:
-    result_type = _row['Type'].lower()
-    original_data = next((item for item in original_json.get(f'{result_type}s', []) 
-                          if str(item.get('position')) == str(_row.get('Position'))), {})
-    
+def analyze_row(_row: Dict[str, Any], api_key: str, query: str) -> Dict[str, Any]:
     prompt = f"""Analyze this search result data for the query '{query}' and provide insights for digital marketing:
 
 Result Type: {_row['Type']}
@@ -139,8 +133,6 @@ Title: {_row['Title']}
 Link: {_row['Link']}
 Position: {_row['Position']}
 Full Data: {json.dumps(_row, indent=2)}
-
-Original Data: {json.dumps(original_data, indent=2)}
 
 Please provide a comprehensive analysis including:
 1. SEO strengths and weaknesses (for organic results) or Ad copy effectiveness (for ads)
@@ -179,7 +171,7 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         LOGGER.error(f"Error processing API response: {e}")
         return {"error": f"Error processing the analysis: {str(e)}"}
 
-def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json: Dict[str, Any], query: str):
+def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], query: str):
     api_key = load_api_key()
     if not api_key:
         st.error("API key not found.")
@@ -188,26 +180,25 @@ def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json:
     all_results = []
     
     for result_type, data in parsed_data.items():
-        if data:
-            for index, row in enumerate(data):
-                with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
-                    analysis = analyze_row(row, api_key, original_json, query)
-                    result = {
-                        "Type": result_type,
-                        "Position": row.get('Position'),
-                        "Title": row.get('Title'),
-                        "Link": row.get('Link'),
-                        "SEO Analysis": analysis.get('seo_analysis'),
-                        "Content Strategy": analysis.get('content_strategy'),
-                        "Keywords": ', '.join(analysis.get('keywords', [])),
-                        "Competitive Positioning": analysis.get('competitive_positioning'),
-                        "Improvements": analysis.get('improvements'),
-                        "USP": analysis.get('usp'),
-                        "CTA Effectiveness": analysis.get('cta_effectiveness'),
-                        "Target Audience": analysis.get('target_audience'),
-                        "Recommendations": analysis.get('recommendations')
-                    }
-                    all_results.append(result)
+        for index, row in enumerate(data):
+            with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
+                analysis = analyze_row(row, api_key, query)
+                result = {
+                    "Type": result_type,
+                    "Position": row.get('Position'),
+                    "Title": row.get('Title'),
+                    "Link": row.get('Link'),
+                    "SEO Analysis": analysis.get('seo_analysis'),
+                    "Content Strategy": analysis.get('content_strategy'),
+                    "Keywords": ', '.join(analysis.get('keywords', [])),
+                    "Competitive Positioning": analysis.get('competitive_positioning'),
+                    "Improvements": analysis.get('improvements'),
+                    "USP": analysis.get('usp'),
+                    "CTA Effectiveness": analysis.get('cta_effectiveness'),
+                    "Target Audience": analysis.get('target_audience'),
+                    "Recommendations": analysis.get('recommendations')
+                }
+                all_results.append(result)
     
     # Store results in session state
     st.session_state.analyzed_results = all_results
@@ -222,46 +213,6 @@ def display_results():
     # Display interactive table
     st.subheader("Analysis Results")
     st.dataframe(df, use_container_width=True)
-    
-    # Visualizations
-    if not df.empty:
-        st.subheader("Result Type Distribution")
-        type_counts = df['Type'].value_counts().reset_index()
-        type_counts.columns = ['Type', 'Count']
-        
-        if not type_counts.empty:
-            chart = alt.Chart(type_counts).mark_bar().encode(
-                x=alt.X('Type:N', sort='-y'),
-                y=alt.Y('Count:Q'),
-                color='Type:N'
-            ).properties(width=600)
-            st.altair_chart(chart, use_container_width=True)
-        else:
-            st.info("Not enough data to display Result Type Distribution.")
-        
-        # Word cloud of keywords
-        if 'Keywords' in df.columns and df['Keywords'].notna().any():
-            st.subheader("Keyword Cloud")
-            try:
-                from wordcloud import WordCloud
-                import matplotlib.pyplot as plt
-                
-                all_keywords = ' '.join(df['Keywords'].dropna().str.cat(sep=' ').split(', '))
-                if all_keywords.strip():
-                    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
-                    
-                    fig, ax = plt.subplots(figsize=(10, 5))
-                    ax.imshow(wordcloud, interpolation='bilinear')
-                    ax.axis('off')
-                    st.pyplot(fig)
-                else:
-                    st.info("No keywords available for the word cloud.")
-            except ImportError:
-                st.warning("WordCloud library is not installed. Please install it to see the keyword cloud visualization.")
-        else:
-            st.info("No keyword data available for visualization.")
-    else:
-        st.info("No data available for visualization.")
     
     # Download options
     if not df.empty:
@@ -325,7 +276,7 @@ def main():
     else:
         st.title("Google Search Results Parser")
         
-        query = st.text_input("Enter search query:", "elisa kits")
+        query = st.text_input("Enter search query:", "biotech marketing")
         num_results = st.slider("Number of results to fetch", min_value=1, max_value=10, value=5)
         
         search_button = st.button("Search")
@@ -350,7 +301,7 @@ def main():
             display_results_table(parsed_data)
             
             if st.button("Analyze Results", key="analyze_button"):
-                process_results(parsed_data, results, query)
+                process_results(parsed_data, query)
             
             display_results()
             
