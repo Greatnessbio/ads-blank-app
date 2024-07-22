@@ -181,6 +181,15 @@ def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], query: str):
     # Store results in session state
     st.session_state.analyzed_results = all_results
 
+def display_results_table(parsed_data: Dict[str, List[Dict[str, Any]]]):
+    for result_type, data in parsed_data.items():
+        if data:
+            st.subheader(f"{result_type.capitalize().replace('_', ' ')} Results")
+            df = pd.DataFrame(data)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info(f"No {result_type.replace('_', ' ')} results found.")
+
 def display_results():
     if 'analyzed_results' not in st.session_state or not st.session_state.analyzed_results:
         st.warning("No analysis results available. Please run the analysis first.")
