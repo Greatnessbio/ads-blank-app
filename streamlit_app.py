@@ -6,8 +6,11 @@ from streamlit.logger import get_logger
 import base64
 from serpapi import GoogleSearch
 from typing import List, Dict, Any
+import logging
 
-LOGGER = get_logger(__name__)
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = get_logger(__name__)
 
 # Set page config at the very beginning
 st.set_page_config(page_title="Google Search Results Parser", page_icon="🔍", layout="wide")
@@ -43,10 +46,14 @@ def fetch_google_search_results(query: str, num_results: int) -> Dict[str, Any]:
     try:
         search = GoogleSearch(params)
         results = search.get_dict()
-        LOGGER.info(f"Full API response: {json.dumps(results, indent=2)}")
+        if not results:
+            st.warning("No results returned from the API. Please try a different query.")
+            logger.warning(f"No results returned for query: {query}")
+        logger.info(f"Full API response: {json.dumps(results, indent=2)}")
         return results
     except Exception as e:
         st.error(f"Error fetching search results: {str(e)}")
+        logger.error(f"API error: {str(e)}", exc_info=True)
         return {}
 
 def parse_results(results: Dict[str, Any], num_results: int) -> Dict[str, List[Dict[str, Any]]]:
@@ -57,73 +64,42 @@ def parse_results(results: Dict[str, Any], num_results: int) -> Dict[str, List[D
         'immersive_products': []
     }
 
-    # Parse ads
-    if 'ads' in results:
-        for item in results['ads'][:num_results]:
-            ad_data = {
-                'Type': 'Ad',
-                'Position': item.get('position'),
-                'Title': item.get('title'),
-                'Link': item.get('link'),
-                'Displayed Link': item.get('displayed_link'),
-                'Description': item.get('description'),
-                'Sitelinks': ', '.join([sitelink.get('title', '') for sitelink in item.get('sitelinks', [])]),
-                'Source': item.get('source')
-            }
-            parsed_data['ads'].append(ad_data)
+    def parse_item(item: Dict[str, Any], item_type: str) -> Dict[str, Any]:
+        default_data = {
+            'Type': item_type,
+            'Position': 'N/A',
+            'Title': 'N/A',
+            'Link': 'N/A',
+            'Displayed Link': 'N/A',
+            'Description': 'N/A',
+            'Sitelinks': 'N/A',
+            'Source': 'N/A'
+        }
+        parsed_item = default_data.copy()
+        
+        for key, value in item.items():
+            if key in parsed_item:
+                parsed_item[key] = value
+        
+        if item_type == 'Ad':
+            parsed_item['Sitelinks'] = ', '.join([sitelink.get('title', '') for sitelink in item.get('sitelinks', [])])
+        elif item_type == 'Organic':
+            parsed_item['Sitelinks'] = ', '.join([sitelink.get('title', '') for sitelink in item.get('sitelinks', {}).get('inline', [])])
+            parsed_item['Description'] = item.get('snippet', 'N/A')
+        elif item_type in ['Shopping', 'Immersive Product']:
+            parsed_item['Price'] = item.get('price', 'N/A')
+            parsed_item['Rating'] = item.get('rating', 'N/A')
+            parsed_item['Reviews'] = item.get('reviews', 'N/A')
+        
+        return parsed_item
 
-    # Parse organic results
-    if 'organic_results' in results:
-        for result in results['organic_results'][:num_results]:
-            organic_data = {
-                'Type': 'Organic',
-                'Position': result.get('position'),
-                'Title': result.get('title'),
-                'Link': result.get('link'),
-                'Displayed Link': result.get('displayed_link'),
-                'Snippet': result.get('snippet'),
-                'Sitelinks': ', '.join([sitelink.get('title', '') for sitelink in result.get('sitelinks', {}).get('inline', [])]),
-                'Source': result.get('source')
-            }
-            parsed_data['organic'].append(organic_data)
-
-    # Parse shopping results
-    if 'shopping_results' in results:
-        for item in results['shopping_results'][:num_results]:
-            shopping_data = {
-                'Type': 'Shopping',
-                'Position': item.get('position'),
-                'Title': item.get('title'),
-                'Link': item.get('link'),
-                'Price': item.get('price'),
-                'Source': item.get('source'),
-                'Rating': item.get('rating'),
-                'Reviews': item.get('reviews')
-            }
-            parsed_data['shopping_results'].append(shopping_data)
-
-    # Parse immersive products
-    if 'immersive_products' in results:
-        for item in results['immersive_products'][:num_results]:
-            immersive_data = {
-                'Type': 'Immersive Product',
-                'Title': item.get('title'),
-                'Link': item.get('link'),
-                'Price': item.get('price'),
-                'Source': item.get('source')
-            }
-            parsed_data['immersive_products'].append(immersive_data)
+    for key, item_type in [('ads', 'Ad'), ('organic_results', 'Organic'), ('shopping_results', 'Shopping'), ('immersive_products', 'Immersive Product')]:
+        items = results.get(key, [])
+        if not items:
+            logger.warning(f"No {item_type} results found in API response")
+        parsed_data[key.rstrip('_results')] = [parse_item(item, item_type) for item in items[:num_results]]
 
     return parsed_data
-
-def display_results_table(parsed_data: Dict[str, List[Dict[str, Any]]]):
-    for result_type, data in parsed_data.items():
-        if data:
-            st.subheader(f"{result_type.capitalize().replace('_', ' ')} Results")
-            df = pd.DataFrame(data)
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info(f"No {result_type.replace('_', ' ')} results found.")
 
 def analyze_row(_row: Dict[str, Any], api_key: str, query: str) -> Dict[str, Any]:
     prompt = f"""Analyze this search result data for the query '{query}' and provide insights for digital marketing:
@@ -165,10 +141,10 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         analysis = response.json()['choices'][0]['message']['content']
         return json.loads(analysis)
     except requests.RequestException as e:
-        LOGGER.error(f"API request failed: {e}")
+        logger.error(f"API request failed: {e}")
         return {"error": f"Failed to analyze row: {str(e)}"}
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
-        LOGGER.error(f"Error processing API response: {e}")
+        logger.error(f"Error processing API response: {e}")
         return {"error": f"Error processing the analysis: {str(e)}"}
 
 def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], query: str):
@@ -180,23 +156,25 @@ def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], query: str):
     all_results = []
     
     for result_type, data in parsed_data.items():
+        if not data:
+            logger.warning(f"No results found for {result_type}")
         for index, row in enumerate(data):
             with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
                 analysis = analyze_row(row, api_key, query)
                 result = {
                     "Type": result_type,
-                    "Position": row.get('Position'),
-                    "Title": row.get('Title'),
-                    "Link": row.get('Link'),
-                    "SEO Analysis": analysis.get('seo_analysis'),
-                    "Content Strategy": analysis.get('content_strategy'),
-                    "Keywords": ', '.join(analysis.get('keywords', [])),
-                    "Competitive Positioning": analysis.get('competitive_positioning'),
-                    "Improvements": analysis.get('improvements'),
-                    "USP": analysis.get('usp'),
-                    "CTA Effectiveness": analysis.get('cta_effectiveness'),
-                    "Target Audience": analysis.get('target_audience'),
-                    "Recommendations": analysis.get('recommendations')
+                    "Position": row.get('Position', 'N/A'),
+                    "Title": row.get('Title', 'N/A'),
+                    "Link": row.get('Link', 'N/A'),
+                    "SEO Analysis": analysis.get('seo_analysis', 'N/A'),
+                    "Content Strategy": analysis.get('content_strategy', 'N/A'),
+                    "Keywords": ', '.join(analysis.get('keywords', ['N/A'])),
+                    "Competitive Positioning": analysis.get('competitive_positioning', 'N/A'),
+                    "Improvements": analysis.get('improvements', 'N/A'),
+                    "USP": analysis.get('usp', 'N/A'),
+                    "CTA Effectiveness": analysis.get('cta_effectiveness', 'N/A'),
+                    "Target Audience": analysis.get('target_audience', 'N/A'),
+                    "Recommendations": analysis.get('recommendations', 'N/A')
                 }
                 all_results.append(result)
     
