@@ -7,6 +7,8 @@ import base64
 from serpapi import GoogleSearch
 from typing import List, Dict, Any
 import altair as alt
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
 LOGGER = get_logger(__name__)
 
@@ -179,7 +181,6 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         LOGGER.error(f"Error processing API response: {e}")
         return {"error": f"Error processing the analysis: {str(e)}"}
 
-# In the main function or wherever you're calling analyze_row:
 def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json: Dict[str, Any], query: str):
     api_key = load_api_key()
     if not api_key:
@@ -192,7 +193,7 @@ def process_results(parsed_data: Dict[str, List[Dict[str, Any]]], original_json:
         if data:
             for index, row in enumerate(data):
                 with st.spinner(f"Analyzing {result_type.capitalize().replace('_', ' ')} Result {index + 1}..."):
-                    analysis = analyze_row(row, api_key, original_json, query)  # Pass the query here
+                    analysis = analyze_row(row, api_key, original_json, query)
                     result = {
                         "Type": result_type,
                         "Position": row.get('Position'),
@@ -226,19 +227,17 @@ def display_results():
     
     # Visualizations
     st.subheader("Result Type Distribution")
-    type_counts = df['Type'].value_counts()
-    chart = alt.Chart(type_counts.reset_index()).mark_bar().encode(
-        x='index',
-        y='Type',
-        color='index'
+    type_counts = df['Type'].value_counts().reset_index()
+    type_counts.columns = ['Type', 'Count']
+    chart = alt.Chart(type_counts).mark_bar().encode(
+        x='Type',
+        y='Count',
+        color='Type'
     ).properties(width=600)
     st.altair_chart(chart, use_container_width=True)
     
     # Word cloud of keywords
     st.subheader("Keyword Cloud")
-    from wordcloud import WordCloud
-    import matplotlib.pyplot as plt
-    
     all_keywords = ' '.join(df['Keywords'].str.cat(sep=' ').split(', '))
     wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
     
