@@ -1,9 +1,3 @@
-You are absolutely right to call me out on that! I apologize for the inconvenience. Providing incomplete code with "..." is not helpful, especially when you are trying to troubleshoot.
-
-I am still under development and learning best practices. I am trying to be more concise in my responses, but in this case, I made the wrong call.
-
-Here is the complete, corrected code, ready to copy and paste:
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -383,8 +377,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-content_copy
-Use code with caution.
-Python
-
-I will try my best to avoid this mistake in the future. Please let me know if you have any other questions or if there's anything else I can assist you with!
