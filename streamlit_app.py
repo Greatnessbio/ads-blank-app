@@ -130,11 +130,15 @@ def analyze_row(_row, api_key, original_json):
     original_data = next((item for item in original_json.get(f'{result_type}s', []) 
                           if str(item.get('position')) == str(_row.get('Position'))), {})
     
-    prompt = f"""Analyze this search result data and provide insights for digital marketing:
+    prompt = f"""Analyze this search result data for the query 'elisa kits' and provide insights for digital marketing:
 
-Parsed data: {json.dumps(_row, indent=2)}
+Result Type: {_row['Type']}
+Title: {_row['Title']}
+Link: {_row['Link']}
+Position: {_row['Position']}
+Full Data: {json.dumps(_row, indent=2)}
 
-Original data: {json.dumps(original_data, indent=2)}
+Original Data: {json.dumps(original_data, indent=2)}
 
 Please provide a comprehensive analysis including:
 1. SEO strengths and weaknesses (for organic results) or Ad copy effectiveness (for ads)
@@ -157,7 +161,7 @@ Format your response as a JSON object with the following keys: seo_analysis, con
             json={
                 "model": "anthropic/claude-3.5-sonnet",
                 "messages": [
-                    {"role": "system", "content": "You are an expert digital marketing analyst specializing in SEO, PPC, and competitive analysis."},
+                    {"role": "system", "content": "You are an expert digital marketing analyst specializing in SEO, PPC, and competitive analysis for scientific and medical products, particularly ELISA kits."},
                     {"role": "user", "content": prompt}
                 ]
             },
@@ -168,10 +172,10 @@ Format your response as a JSON object with the following keys: seo_analysis, con
         return json.loads(analysis)
     except requests.RequestException as e:
         LOGGER.error(f"API request failed: {e}")
-        return {"error": "Failed to analyze row."}
+        return {"error": f"Failed to analyze row: {str(e)}"}
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as e:
         LOGGER.error(f"Error processing API response: {e}")
-        return {"error": "Error processing the analysis."}
+        return {"error": f"Error processing the analysis: {str(e)}"}
 
 def process_results(parsed_data, original_json):
     api_key = load_api_key()
