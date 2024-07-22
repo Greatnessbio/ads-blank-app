@@ -4,4 +4,6 @@ beautifulsoup4
 serpapi
 pandas
 matplotlib
-google-search-results==2.4.2
+google-search-results
+altair
+wordcloud
