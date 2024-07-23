@@ -150,6 +150,15 @@ def display_results_table(parsed_data):
         else:
             st.info(f"No {result_type.replace('_', ' ')} results found.")
 
+def dataframe_to_markdown(df):
+    markdown = "| " + " | ".join(df.columns) + " |\n"
+    markdown += "| " + " | ".join(["---" for _ in df.columns]) + " |\n"
+    
+    for _, row in df.iterrows():
+        markdown += "| " + " | ".join(str(value) for value in row) + " |\n"
+    
+    return markdown
+
 def generate_report(query, parsed_data):
     report = f"# Search Results Analysis for '{query}'\n\n"
 
@@ -157,7 +166,7 @@ def generate_report(query, parsed_data):
         if data:
             report += f"## {result_type.capitalize().replace('_', ' ')} Results\n\n"
             df = pd.DataFrame(data)
-            report += df.to_markdown(index=False)
+            report += dataframe_to_markdown(df)
             report += "\n\n"
 
     return report
