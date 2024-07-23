@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from serpapi import GoogleSearch
 import json
+import base64
 
 # Set page config
 st.set_page_config(page_title="Google Search Results Analyzer", page_icon="🔍", layout="wide")
@@ -33,18 +34,19 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         return {}
 
 def display_results_table(results):
+    tables = {}
     for key, value in results.items():
         if isinstance(value, list) and value:
-            st.subheader(f"{key.replace('_', ' ').title()}")
             df = pd.json_normalize(value)
-            st.dataframe(df, use_container_width=True)
-            
-            for i, item in enumerate(value):
-                with st.expander(f"{key.replace('_', ' ').title()} {i+1} Full JSON"):
-                    st.json(item)
-        elif isinstance(value, dict) and value:
-            st.subheader(f"{key.replace('_', ' ').title()}")
-            st.json(value)
+            tables[key] = df
+    
+    return tables
+
+def get_download_link(data, filename, text):
+    csv = data.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
+    return href
 
 def login():
     st.sidebar.title("Login")
@@ -59,16 +61,6 @@ def login():
                 st.experimental_rerun()
             else:
                 st.error("Invalid username or password")
-
-def get_country_name(country_code):
-    country_names = {
-        "us": "the United States",
-        "uk": "the United Kingdom",
-        "ca": "Canada",
-        "au": "Australia",
-        "in": "India"
-    }
-    return country_names.get(country_code, country_code)
 
 def main():
     if "logged_in" not in st.session_state:
@@ -94,26 +86,42 @@ def main():
                 
                 if results:
                     st.session_state["search_results"] = results
+                    tables = display_results_table(results)
                     
-                    display_results_table(results)
+                    # Display tables
+                    for key, df in tables.items():
+                        st.subheader(f"{key.replace('_', ' ').title()}")
+                        st.dataframe(df, use_container_width=True)
                     
-                    # Display raw results
-                    with st.expander("Raw JSON Results"):
+                    # Prepare download links
+                    download_links = []
+                    for key, df in tables.items():
+                        filename = f"{key}_results.csv"
+                        link = get_download_link(df, filename, f"Download {key.replace('_', ' ').title()} CSV")
+                        download_links.append(link)
+                    
+                    # Add download buttons and raw JSON under a single dropdown
+                    with st.expander("Download Options and Raw Data"):
+                        st.subheader("Download CSV Files")
+                        for link in download_links:
+                            st.markdown(link, unsafe_allow_html=True)
+                        
+                        st.subheader("Raw JSON Data")
                         st.json(results)
                     
-                    # Quick Analysis
+                    # Analysis section
                     st.subheader("Quick Analysis")
-                    if 'ads' in results:
-                        st.write(f"Number of ads: {len(results['ads'])}")
-                    if 'organic_results' in results:
-                        st.write(f"Number of organic results: {len(results['organic_results'])}")
+                    if 'ads' in tables:
+                        st.write(f"Number of ads: {len(tables['ads'])}")
+                    if 'organic_results' in tables:
+                        st.write(f"Number of organic results: {len(tables['organic_results'])}")
                     
                     st.write("For beating ads and improving search rankings, consider:")
                     st.write("1. Analyzing ad copy and keywords used in top ads")
                     st.write("2. Identifying common themes in organic results")
                     st.write("3. Checking the 'people also ask' section for content ideas")
                     st.write("4. Examining related searches for additional keyword opportunities")
-                    st.write(f"5. Analyzing results specific to {location} and {get_country_name(country)}")
+                    st.write(f"5. Analyzing results specific to {location} and {dict(us='the United States', uk='the United Kingdom', ca='Canada', au='Australia', in='India').get(country, country)}")
                 else:
                     st.error("No results to display. Please try a different query.")
         
