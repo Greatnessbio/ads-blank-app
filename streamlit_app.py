@@ -24,7 +24,7 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "location": location,
         "hl": language,
         "gl": country,
-        "google_domain": "google.com"  # Add this to ensure we get ads
+        "google_domain": "google.com"
     }
     try:
         search = GoogleSearch(params)
@@ -40,6 +40,16 @@ def display_results_table(results):
         if isinstance(value, list) and value:
             df = pd.json_normalize(value)
             tables[key] = df
+    
+    # Ensure ads are displayed first if present
+    if 'ads' in tables:
+        st.subheader("Google Ads")
+        st.dataframe(tables['ads'], use_container_width=True)
+    
+    for key, df in tables.items():
+        if key != 'ads':
+            st.subheader(f"{key.replace('_', ' ').title()}")
+            st.dataframe(df, use_container_width=True)
     
     return tables
 
@@ -88,11 +98,6 @@ def main():
                 if results:
                     st.session_state["search_results"] = results
                     tables = display_results_table(results)
-                    
-                    # Display tables
-                    for key, df in tables.items():
-                        st.subheader(f"{key.replace('_', ' ').title()}")
-                        st.dataframe(df, use_container_width=True)
                     
                     # Prepare download links
                     download_links = []
