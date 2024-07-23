@@ -24,7 +24,8 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "location": location,
         "hl": language,
         "gl": country,
-        "google_domain": "google.com"
+        "google_domain": "google.com",
+        "tbm": ""
     }
     try:
         search = GoogleSearch(params)
@@ -40,7 +41,6 @@ def display_results_table(results):
         if isinstance(value, list) and value:
             df = pd.json_normalize(value)
             tables[key] = df
-    
     return tables
 
 def get_download_link(data, filename, text):
@@ -71,7 +71,6 @@ def main():
     else:
         st.title("Google Search Results Parser")
         
-        # Search parameters
         col1, col2 = st.columns(2)
         with col1:
             query = st.text_input("Enter search query:")
@@ -89,19 +88,16 @@ def main():
                     st.session_state["search_results"] = results
                     tables = display_results_table(results)
                     
-                    # Display tables
                     for key, df in tables.items():
                         st.subheader(f"{key.replace('_', ' ').title()}")
                         st.dataframe(df, use_container_width=True)
                     
-                    # Prepare download links
                     download_links = []
                     for key, df in tables.items():
                         filename = f"{key}_results.csv"
                         link = get_download_link(df, filename, f"Download {key.replace('_', ' ').title()} CSV")
                         download_links.append(link)
                     
-                    # Add download buttons and raw JSON under a single dropdown
                     with st.expander("Download Options and Raw Data"):
                         st.subheader("Download CSV Files")
                         for link in download_links:
@@ -110,14 +106,12 @@ def main():
                         st.subheader("Raw JSON Data")
                         st.json(results)
                     
-                    # Analysis section
                     st.subheader("Quick Analysis")
-                    if 'ads' in tables:
-                        st.write(f"Number of ads: {len(tables['ads'])}")
-                        
-                        # Display ad details
+                    ads = results.get('ads', [])
+                    if ads:
+                        st.write(f"Number of ads: {len(ads)}")
                         st.subheader("Ad Details")
-                        for i, ad in enumerate(results.get('ads', []), 1):
+                        for i, ad in enumerate(ads, 1):
                             st.write(f"Ad {i}:")
                             st.write(f"Title: {ad.get('title', 'N/A')}")
                             st.write(f"Link: {ad.get('link', 'N/A')}")
@@ -129,12 +123,15 @@ def main():
                                 for sitelink in ad['sitelinks']:
                                     st.write(f"- {sitelink.get('title', 'N/A')}: {sitelink.get('link', 'N/A')}")
                             st.write("---")
+                    else:
+                        st.info("No ads were returned for this search query.")
+                        st.write("Try a more commercial query or a different location to potentially see ads.")
                     
                     if 'organic_results' in tables:
                         st.write(f"Number of organic results: {len(tables['organic_results'])}")
                     
                     st.write("For beating ads and improving search rankings, consider:")
-                    st.write("1. Analyzing ad copy and keywords used in top ads")
+                    st.write("1. Analyzing ad copy and keywords used in top ads (when present)")
                     st.write("2. Identifying common themes in organic results")
                     st.write("3. Checking the 'people also ask' section for content ideas")
                     st.write("4. Examining related searches for additional keyword opportunities")
