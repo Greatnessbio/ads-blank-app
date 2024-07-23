@@ -24,9 +24,7 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "location": location,
         "hl": language,
         "gl": country,
-        "google_domain": "google.com",
-        "tbm": "",  # This ensures we're searching the main Google search, which includes ads
-        "device": "desktop"  # Specify device type to ensure consistent results
+        "google_domain": "google.com"  # Add this to ensure we get ads
     }
     try:
         search = GoogleSearch(params)
@@ -42,6 +40,7 @@ def display_results_table(results):
         if isinstance(value, list) and value:
             df = pd.json_normalize(value)
             tables[key] = df
+    
     return tables
 
 def get_download_link(data, filename, text):
@@ -75,7 +74,7 @@ def main():
         # Search parameters
         col1, col2 = st.columns(2)
         with col1:
-            query = st.text_input("Enter search query:", value="hot dogs")
+            query = st.text_input("Enter search query:")
             num_results = st.slider("Number of results to fetch", min_value=1, max_value=100, value=10)
             location = st.text_input("Location (e.g., New York, NY)", value="Austin, Texas, United States")
         with col2:
@@ -88,35 +87,12 @@ def main():
                 
                 if results:
                     st.session_state["search_results"] = results
-                    
-                    # Display ads
-                    if 'ads' in results:
-                        st.subheader("Ads")
-                        ads_df = pd.json_normalize(results['ads'])
-                        st.dataframe(ads_df, use_container_width=True)
-                        
-                        st.subheader("Ad Details")
-                        for i, ad in enumerate(results['ads'], 1):
-                            st.write(f"Ad {i}:")
-                            st.write(f"Title: {ad.get('title', 'N/A')}")
-                            st.write(f"Link: {ad.get('link', 'N/A')}")
-                            st.write(f"Description: {ad.get('description', 'N/A')}")
-                            st.write(f"Position: {ad.get('position', 'N/A')}")
-                            st.write(f"Block Position: {ad.get('block_position', 'N/A')}")
-                            if 'sitelinks' in ad:
-                                st.write("Sitelinks:")
-                                for sitelink in ad['sitelinks']:
-                                    st.write(f"- {sitelink.get('title', 'N/A')}: {sitelink.get('link', 'N/A')}")
-                            st.write("---")
-                    else:
-                        st.warning("No ads were found for this search query. This is unusual for 'hot dogs'. Please check your SerpAPI settings and ensure you have access to ad data.")
-
-                    # Display other results
                     tables = display_results_table(results)
+                    
+                    # Display tables
                     for key, df in tables.items():
-                        if key != 'ads':  # We've already displayed ads
-                            st.subheader(f"{key.replace('_', ' ').title()}")
-                            st.dataframe(df, use_container_width=True)
+                        st.subheader(f"{key.replace('_', ' ').title()}")
+                        st.dataframe(df, use_container_width=True)
                     
                     # Prepare download links
                     download_links = []
@@ -136,8 +112,10 @@ def main():
                     
                     # Analysis section
                     st.subheader("Quick Analysis")
-                    st.write(f"Number of ads: {len(results.get('ads', []))}")
-                    st.write(f"Number of organic results: {len(results.get('organic_results', []))}")
+                    if 'ads' in tables:
+                        st.write(f"Number of ads: {len(tables['ads'])}")
+                    if 'organic_results' in tables:
+                        st.write(f"Number of organic results: {len(tables['organic_results'])}")
                     
                     st.write("For beating ads and improving search rankings, consider:")
                     st.write("1. Analyzing ad copy and keywords used in top ads")
