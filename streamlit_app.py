@@ -100,7 +100,7 @@ def main():
                         st.json(results)
                     
                     # Analysis section
-                    st.subheader("Quick Analysis")
+                    st.subheader("Quick Analysis PLACEHOLDER FOR AI")
                     if 'ads' in tables:
                         st.write(f"Number of ads: {len(tables['ads'])}")
                     if 'organic_results' in tables:
