@@ -24,7 +24,7 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "location": location,
         "hl": language,
         "gl": country,
-        "google_domain": "google.com"  # Add this to ensure we get ads
+        "google_domain": "google.com"
     }
     try:
         search = GoogleSearch(params)
@@ -114,6 +114,22 @@ def main():
                     st.subheader("Quick Analysis")
                     if 'ads' in tables:
                         st.write(f"Number of ads: {len(tables['ads'])}")
+                        
+                        # Display ad details
+                        st.subheader("Ad Details")
+                        for i, ad in enumerate(results.get('ads', []), 1):
+                            st.write(f"Ad {i}:")
+                            st.write(f"Title: {ad.get('title', 'N/A')}")
+                            st.write(f"Link: {ad.get('link', 'N/A')}")
+                            st.write(f"Description: {ad.get('description', 'N/A')}")
+                            st.write(f"Position: {ad.get('position', 'N/A')}")
+                            st.write(f"Block Position: {ad.get('block_position', 'N/A')}")
+                            if 'sitelinks' in ad:
+                                st.write("Sitelinks:")
+                                for sitelink in ad['sitelinks']:
+                                    st.write(f"- {sitelink.get('title', 'N/A')}: {sitelink.get('link', 'N/A')}")
+                            st.write("---")
+                    
                     if 'organic_results' in tables:
                         st.write(f"Number of organic results: {len(tables['organic_results'])}")
                     
