@@ -24,8 +24,7 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "location": location,
         "hl": language,
         "gl": country,
-        "google_domain": "google.com",
-        "tbm": ""
+        "google_domain": "google.com"
     }
     try:
         search = GoogleSearch(params)
@@ -71,9 +70,10 @@ def main():
     else:
         st.title("Google Search Results Parser")
         
+        # Search parameters
         col1, col2 = st.columns(2)
         with col1:
-            query = st.text_input("Enter search query:")
+            query = st.text_input("Enter search query:", value="hot dogs")
             num_results = st.slider("Number of results to fetch", min_value=1, max_value=100, value=10)
             location = st.text_input("Location (e.g., New York, NY)", value="Austin, Texas, United States")
         with col2:
@@ -88,16 +88,19 @@ def main():
                     st.session_state["search_results"] = results
                     tables = display_results_table(results)
                     
+                    # Display tables
                     for key, df in tables.items():
                         st.subheader(f"{key.replace('_', ' ').title()}")
                         st.dataframe(df, use_container_width=True)
                     
+                    # Prepare download links
                     download_links = []
                     for key, df in tables.items():
                         filename = f"{key}_results.csv"
                         link = get_download_link(df, filename, f"Download {key.replace('_', ' ').title()} CSV")
                         download_links.append(link)
                     
+                    # Add download buttons and raw JSON under a single dropdown
                     with st.expander("Download Options and Raw Data"):
                         st.subheader("Download CSV Files")
                         for link in download_links:
@@ -106,12 +109,14 @@ def main():
                         st.subheader("Raw JSON Data")
                         st.json(results)
                     
+                    # Analysis section
                     st.subheader("Quick Analysis")
-                    ads = results.get('ads', [])
-                    if ads:
-                        st.write(f"Number of ads: {len(ads)}")
+                    
+                    # Check for ads
+                    if 'ads' in results:
+                        st.write(f"Number of ads: {len(results['ads'])}")
                         st.subheader("Ad Details")
-                        for i, ad in enumerate(ads, 1):
+                        for i, ad in enumerate(results['ads'], 1):
                             st.write(f"Ad {i}:")
                             st.write(f"Title: {ad.get('title', 'N/A')}")
                             st.write(f"Link: {ad.get('link', 'N/A')}")
@@ -124,8 +129,20 @@ def main():
                                     st.write(f"- {sitelink.get('title', 'N/A')}: {sitelink.get('link', 'N/A')}")
                             st.write("---")
                     else:
-                        st.info("No ads were returned for this search query.")
-                        st.write("Try a more commercial query or a different location to potentially see ads.")
+                        st.info("No ads were found for this search query.")
+
+                    # Check for shopping results
+                    if 'shopping_results' in results:
+                        st.write(f"Number of shopping results: {len(results['shopping_results'])}")
+                        st.subheader("Shopping Results")
+                        for i, item in enumerate(results['shopping_results'], 1):
+                            st.write(f"Item {i}:")
+                            st.write(f"Title: {item.get('title', 'N/A')}")
+                            st.write(f"Price: {item.get('price', 'N/A')}")
+                            st.write(f"Link: {item.get('link', 'N/A')}")
+                            st.write("---")
+                    else:
+                        st.info("No shopping results were found for this search query.")
                     
                     if 'organic_results' in tables:
                         st.write(f"Number of organic results: {len(tables['organic_results'])}")
