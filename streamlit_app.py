@@ -32,7 +32,8 @@ def fetch_google_search_results(query: str, num_results: int):
     "hl": "en",
     "gl": "us",
     "google_domain": "google.com",
-    "location": "United States",
+    "location": "New York,New York,United States",
+    "device": "desktop",
     "include_ads": "true",
 }
 
