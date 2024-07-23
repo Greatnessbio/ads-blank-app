@@ -25,14 +25,16 @@ def fetch_google_search_results(query: str, num_results: int):
         return {}
 
     params = {
-        "engine": "google",
-        "q": query,
-        "api_key": SERPAPI_KEY,
-        "num": num_results,
-        "hl": "en",
-        "gl": "us",
-        "include_ads": "true",
-    }
+    "engine": "google",
+    "q": query,
+    "api_key": SERPAPI_KEY,
+    "num": num_results,
+    "hl": "en",
+    "gl": "us",
+    "google_domain": "google.com",
+    "location": "United States",
+    "include_ads": "true",
+}
 
     try:
         search = GoogleSearch(params)
