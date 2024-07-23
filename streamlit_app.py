@@ -12,7 +12,7 @@ SERPAPI_KEY = st.secrets["serpapi"]["api_key"]
 USERNAME = st.secrets["credentials"]["username"]
 PASSWORD = st.secrets["credentials"]["password"]
 
-def fetch_search_results(query: str, num_results: int):
+def fetch_search_results(query: str, num_results: int, location: str, language: str, country: str):
     if not SERPAPI_KEY:
         st.error("SerpAPI key is missing. Please check your secrets.")
         return {}
@@ -21,7 +21,9 @@ def fetch_search_results(query: str, num_results: int):
         "engine": "google",
         "q": query,
         "num": num_results,
-        "location": "Austin, Texas, United States"
+        "location": location,
+        "hl": language,
+        "gl": country
     }
     try:
         search = GoogleSearch(params)
@@ -67,12 +69,20 @@ def main():
         login()
     else:
         st.title("Google Search Results Analyzer")
-        query = st.text_input("Enter search query:")
-        num_results = st.slider("Number of results to fetch", min_value=1, max_value=100, value=10)
+        
+        # Search parameters
+        col1, col2 = st.columns(2)
+        with col1:
+            query = st.text_input("Enter search query:")
+            num_results = st.slider("Number of results to fetch", min_value=1, max_value=100, value=10)
+            location = st.text_input("Location (e.g., New York, NY)", value="Austin, Texas, United States")
+        with col2:
+            language = st.selectbox("Language", options=["en", "es", "fr", "de", "it"], format_func=lambda x: {"en": "English", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian"}[x])
+            country = st.selectbox("Country", options=["us", "uk", "ca", "au", "in"], format_func=lambda x: {"us": "United States", "uk": "United Kingdom", "ca": "Canada", "au": "Australia", "in": "India"}[x])
         
         if st.button("Search"):
             with st.spinner("Fetching results..."):
-                results = fetch_search_results(query, num_results)
+                results = fetch_search_results(query, num_results, location, language, country)
                 
                 if results:
                     st.session_state["search_results"] = results
@@ -100,18 +110,18 @@ def main():
                         st.json(results)
                     
                     # Analysis section
-                    st.subheader("Quick Analysis PLACEHOLDER FOR AI")
+                    st.subheader("Quick Analysis")
                     if 'ads' in tables:
                         st.write(f"Number of ads: {len(tables['ads'])}")
                     if 'organic_results' in tables:
                         st.write(f"Number of organic results: {len(tables['organic_results'])}")
                     
-                    # TODO: Add more in-depth analysis here
                     st.write("For beating ads and improving search rankings, consider:")
                     st.write("1. Analyzing ad copy and keywords used in top ads")
                     st.write("2. Identifying common themes in organic results")
                     st.write("3. Checking the 'people also ask' section for content ideas")
                     st.write("4. Examining related searches for additional keyword opportunities")
+                    st.write(f"5. Analyzing results specific to {location} and {dict(us='the United States', uk='the United Kingdom', ca='Canada', au='Australia', in='India')[country]}")
                 else:
                     st.error("No results to display. Please try a different query.")
         
