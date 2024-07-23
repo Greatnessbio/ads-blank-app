@@ -62,6 +62,16 @@ def login():
             else:
                 st.error("Invalid username or password")
 
+def get_country_name(country_code):
+    country_names = {
+        "us": "the United States",
+        "uk": "the United Kingdom",
+        "ca": "Canada",
+        "au": "Australia",
+        "in": "India"
+    }
+    return country_names.get(country_code, country_code)
+
 def main():
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
@@ -121,7 +131,7 @@ def main():
                     st.write("2. Identifying common themes in organic results")
                     st.write("3. Checking the 'people also ask' section for content ideas")
                     st.write("4. Examining related searches for additional keyword opportunities")
-                    st.write(f"5. Analyzing results specific to {location} and {dict(us='the United States', uk='the United Kingdom', ca='Canada', au='Australia', in='India').get(country, country)}")
+                    st.write(f"5. Analyzing results specific to {location} and {get_country_name(country)}")
                 else:
                     st.error("No results to display. Please try a different query.")
         
