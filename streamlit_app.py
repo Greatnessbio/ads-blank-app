@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from serpapi import GoogleSearch
 import json
-import base64
 
 # Set page config
 st.set_page_config(page_title="Google Search Results Analyzer", page_icon="🔍", layout="wide")
@@ -47,12 +46,6 @@ def display_results_table(results):
             st.subheader(f"{key.replace('_', ' ').title()}")
             st.json(value)
 
-def get_download_link(data, filename, text):
-    csv = data.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
-    return href
-
 def login():
     st.sidebar.title("Login")
     with st.sidebar.form("login_form"):
@@ -66,6 +59,16 @@ def login():
                 st.experimental_rerun()
             else:
                 st.error("Invalid username or password")
+
+def get_country_name(country_code):
+    country_names = {
+        "us": "the United States",
+        "uk": "the United Kingdom",
+        "ca": "Canada",
+        "au": "Australia",
+        "in": "India"
+    }
+    return country_names.get(country_code, country_code)
 
 def main():
     if "logged_in" not in st.session_state:
@@ -110,7 +113,7 @@ def main():
                     st.write("2. Identifying common themes in organic results")
                     st.write("3. Checking the 'people also ask' section for content ideas")
                     st.write("4. Examining related searches for additional keyword opportunities")
-                    st.write(f"5. Analyzing results specific to {location} and {dict(us='the United States', uk='the United Kingdom', ca='Canada', au='Australia', in='India').get(country, country)}")
+                    st.write(f"5. Analyzing results specific to {location} and {get_country_name(country)}")
                 else:
                     st.error("No results to display. Please try a different query.")
         
