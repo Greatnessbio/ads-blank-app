@@ -23,7 +23,8 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "num": num_results,
         "location": location,
         "hl": language,
-        "gl": country
+        "gl": country,
+        "google_domain": "google.com"  # Add this to ensure we get ads
     }
     try:
         search = GoogleSearch(params)
