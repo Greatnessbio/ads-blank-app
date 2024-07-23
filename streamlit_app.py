@@ -24,7 +24,9 @@ def fetch_search_results(query: str, num_results: int, location: str, language: 
         "location": location,
         "hl": language,
         "gl": country,
-        "google_domain": "google.com"
+        "google_domain": "google.com",
+        "tbm": "",  # This ensures we're searching the main Google search, which includes ads
+        "device": "desktop"  # Specify device type to ensure consistent results
     }
     try:
         search = GoogleSearch(params)
@@ -86,12 +88,35 @@ def main():
                 
                 if results:
                     st.session_state["search_results"] = results
-                    tables = display_results_table(results)
                     
-                    # Display tables
+                    # Display ads
+                    if 'ads' in results:
+                        st.subheader("Ads")
+                        ads_df = pd.json_normalize(results['ads'])
+                        st.dataframe(ads_df, use_container_width=True)
+                        
+                        st.subheader("Ad Details")
+                        for i, ad in enumerate(results['ads'], 1):
+                            st.write(f"Ad {i}:")
+                            st.write(f"Title: {ad.get('title', 'N/A')}")
+                            st.write(f"Link: {ad.get('link', 'N/A')}")
+                            st.write(f"Description: {ad.get('description', 'N/A')}")
+                            st.write(f"Position: {ad.get('position', 'N/A')}")
+                            st.write(f"Block Position: {ad.get('block_position', 'N/A')}")
+                            if 'sitelinks' in ad:
+                                st.write("Sitelinks:")
+                                for sitelink in ad['sitelinks']:
+                                    st.write(f"- {sitelink.get('title', 'N/A')}: {sitelink.get('link', 'N/A')}")
+                            st.write("---")
+                    else:
+                        st.warning("No ads were found for this search query. This is unusual for 'hot dogs'. Please check your SerpAPI settings and ensure you have access to ad data.")
+
+                    # Display other results
+                    tables = display_results_table(results)
                     for key, df in tables.items():
-                        st.subheader(f"{key.replace('_', ' ').title()}")
-                        st.dataframe(df, use_container_width=True)
+                        if key != 'ads':  # We've already displayed ads
+                            st.subheader(f"{key.replace('_', ' ').title()}")
+                            st.dataframe(df, use_container_width=True)
                     
                     # Prepare download links
                     download_links = []
@@ -111,44 +136,11 @@ def main():
                     
                     # Analysis section
                     st.subheader("Quick Analysis")
-                    
-                    # Check for ads
-                    if 'ads' in results:
-                        st.write(f"Number of ads: {len(results['ads'])}")
-                        st.subheader("Ad Details")
-                        for i, ad in enumerate(results['ads'], 1):
-                            st.write(f"Ad {i}:")
-                            st.write(f"Title: {ad.get('title', 'N/A')}")
-                            st.write(f"Link: {ad.get('link', 'N/A')}")
-                            st.write(f"Description: {ad.get('description', 'N/A')}")
-                            st.write(f"Position: {ad.get('position', 'N/A')}")
-                            st.write(f"Block Position: {ad.get('block_position', 'N/A')}")
-                            if 'sitelinks' in ad:
-                                st.write("Sitelinks:")
-                                for sitelink in ad['sitelinks']:
-                                    st.write(f"- {sitelink.get('title', 'N/A')}: {sitelink.get('link', 'N/A')}")
-                            st.write("---")
-                    else:
-                        st.info("No ads were found for this search query.")
-
-                    # Check for shopping results
-                    if 'shopping_results' in results:
-                        st.write(f"Number of shopping results: {len(results['shopping_results'])}")
-                        st.subheader("Shopping Results")
-                        for i, item in enumerate(results['shopping_results'], 1):
-                            st.write(f"Item {i}:")
-                            st.write(f"Title: {item.get('title', 'N/A')}")
-                            st.write(f"Price: {item.get('price', 'N/A')}")
-                            st.write(f"Link: {item.get('link', 'N/A')}")
-                            st.write("---")
-                    else:
-                        st.info("No shopping results were found for this search query.")
-                    
-                    if 'organic_results' in tables:
-                        st.write(f"Number of organic results: {len(tables['organic_results'])}")
+                    st.write(f"Number of ads: {len(results.get('ads', []))}")
+                    st.write(f"Number of organic results: {len(results.get('organic_results', []))}")
                     
                     st.write("For beating ads and improving search rankings, consider:")
-                    st.write("1. Analyzing ad copy and keywords used in top ads (when present)")
+                    st.write("1. Analyzing ad copy and keywords used in top ads")
                     st.write("2. Identifying common themes in organic results")
                     st.write("3. Checking the 'people also ask' section for content ideas")
                     st.write("4. Examining related searches for additional keyword opportunities")
